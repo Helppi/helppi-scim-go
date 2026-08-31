@@ -48,8 +48,8 @@ func (e *Error) Code() int {
 	return n
 }
 
-// Conflict reports a 409: the picker_id is already bound to a different
-// directory identity. Retrying cannot fix it — a human has to.
+// Conflict reports a 409: the value is already bound to a different directory
+// identity. Retrying cannot fix it — a human has to.
 func (e *Error) Conflict() bool { return e.Code() == http.StatusConflict }
 
 // Credential reports 401/403: the token is missing, revoked, or the operation

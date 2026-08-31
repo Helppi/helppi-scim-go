@@ -192,7 +192,8 @@ func (c *Client) GetUser(ctx context.Context, id string) (*User, error) {
 	return &u, nil
 }
 
-// PatchExternalID writes the picker_id back onto the directory record. It is
+// PatchExternalID writes your own identifier for this person back onto the
+// directory record. It is
 // the only write this client performs, and it is idempotent: sending the same
 // value twice is accepted and changes nothing.
 func (c *Client) PatchExternalID(ctx context.Context, id, externalID string) (*User, error) {
@@ -213,7 +214,7 @@ func (c *Client) PatchExternalID(ctx context.Context, id, externalID string) (*U
 // ServiceProviderConfig reports the directory's advertised capabilities. Read
 // it at startup instead of assuming: a directory that does not support filter
 // makes incremental synchronization impossible, and one that does not support
-// PATCH makes the picker_id write-back impossible.
+// PATCH makes the write-back impossible.
 func (c *Client) ServiceProviderConfig(ctx context.Context) (*ProviderConfig, error) {
 	var cfg ProviderConfig
 	if err := c.do(ctx, http.MethodGet, "ServiceProviderConfig", nil, &cfg); err != nil {

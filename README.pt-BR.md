@@ -19,7 +19,7 @@ reconciliador funcionando, não de uma especificação.
   incluindo as falhas que importam: `403`, `409`, `429`, `5xx`, registros
   inválidos, paginação quebrada e respostas que nem SCIM são.
 - **`testdata/directory.json` é o conjunto de conformidade**: os cinco estados
-  de ciclo de vida da proposta, mais os casos de devolução do `picker_id`. Os
+  de ciclo de vida da proposta, mais os casos de devolução do `externalId`. Os
   dois lados podem testar contra os mesmos bytes.
 
 ```bash
@@ -38,8 +38,8 @@ vocês, nem no diretório, nem no checkpoint.
 
 O worker **se recusa** a rodar de verdade contra um diretório usando o store em
 memória, e essa trava é deliberada: um store vazio faz todo registro parecer
-novo, então ele criaria pickers do zero e gravaria esses ids inventados por cima
-dos `picker_id` reais. Isso corrompe dados do lado da Helppi. Ligue um
+novo, então ele criaria helppers do zero e gravaria esses ids inventados por cima
+dos `externalId` reais. Isso corrompe dados do lado da Helppi. Ligue um
 `store.Store` de verdade antes.
 
 ## Início rápido
@@ -74,7 +74,7 @@ ordem a preservar nem evento a perder, então o processo pode ser morto e
 reiniciado em qualquer ponto.
 
 ```
-a cada 5 min ──► ciclo incremental ──► apply(registro) ──► devolve picker_id
+a cada 5 min ──► ciclo incremental ──► apply(registro) ──► devolve externalId
                         │                                        │
               checkpoint só avança se o ciclo             409 ⇒ alerta uma vez,
               terminou inteiro                            nunca repetição
@@ -85,7 +85,7 @@ a cada 24 h ─► varredura completa ──► relatório de divergência
 
 | Pacote | Responsabilidade |
 |---|---|
-| `scim` | Protocolo: tipos, cliente HTTP, paginação, retry. Não sabe o que é um picker. |
+| `scim` | Protocolo: tipos, cliente HTTP, paginação, retry. Não sabe o que é um helpper. |
 | `store` | O contrato do lado local, com implementação em memória e suíte de contrato. |
 | `directory` | O reconciliador. Não sabe o que é HTTP. |
 | `scimtest` | Diretório falso com injeção de falhas. |
@@ -106,7 +106,7 @@ a cada 24 h ─► varredura completa ──► relatório de divergência
    frota inteira. `nil` é recusado, nunca lido como "desabilitado".
 2. **O checkpoint só avança quando o ciclo termina inteiro.** Um ciclo parcial
    que avança a marca d'água perde registros de forma permanente e silenciosa: o
-   sintoma aparece semanas depois, como um picker que ninguém bloqueou.
+   sintoma aparece semanas depois, como um helpper que ninguém bloqueou.
 3. **A marca d'água vem de `meta.lastModified`, não do relógio local.** O desvio
    de relógio entre as duas empresas deixa de importar. Um horário absurdamente
    no futuro é recusado em vez de aceito.
@@ -139,7 +139,7 @@ a cada 24 h ─► varredura completa ──► relatório de divergência
   desligamento chega ao parceiro em até N minutos", e pega um worker travado
   mesmo quando nada está dando erro.
 - **Rode uma instância só.** Duas réplicas no mesmo cronograma tentam criar os
-  mesmos pickers na primeira sincronização. O índice único evita duplicidade,
+  mesmos helppers na primeira sincronização. O índice único evita duplicidade,
   mas a tempestade de `409` é evitável: use *lease*, *advisory lock* ou
   `concurrencyPolicy: Forbid`.
 
@@ -147,7 +147,7 @@ a cada 24 h ─► varredura completa ──► relatório de divergência
 
 O acesso com um toque (seções 09 a 11 da proposta) não está aqui. É um cliente
 OpenID Connect comum — `golang.org/x/oauth2` mais `github.com/coreos/go-oidc` —
-em que o callback faz `sub → pickers.directory_id → sessão`. O caminho
+em que o callback faz `sub → helppers.directory_id → sessão`. O caminho
 alternativo, com URL de entrada assinada, é uma verificação de JWT mais um
 registro de uso único.
 

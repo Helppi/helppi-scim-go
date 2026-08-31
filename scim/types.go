@@ -1,7 +1,7 @@
 // Package scim implements the subset of SCIM 2.0 (RFC 7643 / RFC 7644) needed
 // to consume a partner directory: list, read and a single-attribute PATCH.
 //
-// It carries no business logic. Nothing in this package knows what a picker is.
+// It carries no business logic. Nothing in this package knows what a helpper is.
 package scim
 
 import (
@@ -76,7 +76,7 @@ func (u User) PrimaryEmail() string {
 
 // ProviderConfig is the subset of ServiceProviderConfig this client cares
 // about. A directory without filter support cannot be synchronized
-// incrementally; one without PATCH support cannot receive the picker_id.
+// incrementally; one without PATCH support cannot receive the write-back.
 type ProviderConfig struct {
 	Schemas []string `json:"schemas"`
 	Patch   struct {

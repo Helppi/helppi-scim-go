@@ -152,7 +152,7 @@ func TestServiceProviderConfigReportsCapabilities(t *testing.T) {
 		t.Error("filter support should be reported: without it there is no incremental sync")
 	}
 	if !cfg.Patch.Supported {
-		t.Error("patch support should be reported: without it the picker_id cannot go back")
+		t.Error("patch support should be reported: without it the write-back cannot happen")
 	}
 	if cfg.Filter.MaxResults == 0 {
 		t.Error("maxResults should be reported so a client can size its pages")

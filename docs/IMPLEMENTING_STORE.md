@@ -14,10 +14,10 @@ func TestMyStore(t *testing.T) {
 }
 ```
 
-It checks the things that are easy to get subtly wrong: that a missing picker
+It checks the things that are easy to get subtly wrong: that a missing helpper
 returns `ErrNotFound` rather than a zero value, that a duplicate `directory_id`
 returns `ErrAlreadyExists`, that eight concurrent creates produce exactly one
-picker, that `EnabledPickers` excludes disabled ones, and that a checkpoint
+helpper, that `EnabledHelppers` excludes disabled ones, and that a checkpoint
 survives a round trip with its time zone intact.
 
 ## The schema
@@ -25,14 +25,14 @@ survives a round trip with its time zone intact.
 `deploy/schema.sql` is the reference. Two things in it are load-bearing:
 
 ```sql
-constraint pickers_directory_id_key unique (directory_id)
+constraint helppers_directory_id_key unique (directory_id)
 ```
 
 This is what actually makes creation idempotent. The reconciler's "does it
 exist?" lookup is a fast path, not a guarantee — two workers can both miss it
 and both proceed. Under a unique index the loser gets a constraint violation,
 which you translate to `ErrAlreadyExists`, and the reconciler re-reads and
-continues. Without the index, you get two pickers for one person and a `409`
+continues. Without the index, you get two helppers for one person and a `409`
 storm on write-back.
 
 ```sql
@@ -47,10 +47,10 @@ tells the reconciler to walk everything on the first run.
 ## Translating errors
 
 ```go
-func (s *PostgresStore) CreatePicker(ctx context.Context, p store.NewPicker) (store.Picker, error) {
-    var out store.Picker
+func (s *PostgresStore) CreateHelpper(ctx context.Context, p store.NewHelpper) (store.Helpper, error) {
+    var out store.Helpper
     err := s.db.QueryRow(ctx, `
-        insert into pickers (directory_id, login, display_name, enabled)
+        insert into helppers (directory_id, login, display_name, enabled)
         values ($1, $2, $3, true)
         returning id::text, directory_id, login, display_name, enabled
     `, p.DirectoryID, p.Login, p.DisplayName).Scan(
@@ -58,10 +58,10 @@ func (s *PostgresStore) CreatePicker(ctx context.Context, p store.NewPicker) (st
 
     var pgErr *pgconn.PgError
     if errors.As(err, &pgErr) && pgErr.Code == "23505" { // unique_violation
-        return store.Picker{}, store.ErrAlreadyExists
+        return store.Helpper{}, store.ErrAlreadyExists
     }
     if errors.Is(err, pgx.ErrNoRows) {
-        return store.Picker{}, store.ErrNotFound
+        return store.Helpper{}, store.ErrNotFound
     }
     return out, err
 }
@@ -72,10 +72,10 @@ them. The reconciler branches on `ErrNotFound` to decide whether to create, and
 on `ErrAlreadyExists` to decide whether to re-read: a driver error that does not
 match either is treated as a real failure and stops the cycle.
 
-## Picker identifiers
+## Helpper identifiers
 
-`Picker.ID` is a string so a UUID, a ULID or a bigint all fit — format it
-however your system already identifies pickers. Two requirements: it must be
+`Helpper.ID` is a string so a UUID, a ULID or a bigint all fit — format it
+however your system already identifies helppers. Two requirements: it must be
 stable for the life of the account, and it must never be reassigned. It is
 written into Helppi's directory as `externalId`, and both sides use the pair
 afterwards.

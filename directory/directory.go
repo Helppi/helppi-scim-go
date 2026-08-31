@@ -1,4 +1,4 @@
-// Package directory reconciles the local picker base against the Helppi
+// Package directory reconciles the local helpper base against the Helppi
 // partner directory.
 //
 // The model is a reconciler, not a message consumer: every cycle re-derives the
@@ -44,14 +44,14 @@ const (
 // Stats summarizes one cycle.
 type Stats struct {
 	Scanned   int // records read from the directory
-	Created   int // pickers created locally
-	Enabled   int // pickers re-enabled
-	Disabled  int // pickers disabled
+	Created   int // helppers created locally
+	Enabled   int // helppers re-enabled
+	Disabled  int // helppers disabled
 	Updated   int // display name or login changed
 	Unchanged int // already in the desired state
 	Skipped   int // inactive and unknown: deliberately not created
 	Malformed int // unusable records, skipped and alerted
-	WroteBack int // picker_id written back to the directory
+	WroteBack int // identifiers written back to the directory as externalId
 	Conflicts int // write-backs refused with 409
 
 	Duration   time.Duration
@@ -65,12 +65,12 @@ type Stats struct {
 type Drift struct {
 	AbsentFromDirectory []string // enabled locally, not returned by a full walk
 	ShouldBeDisabled    []string // directory says inactive, still enabled locally
-	MissingPickerID     []string // we have a picker, directory has no externalId
+	MissingExternalID   []string // we have a helpper, directory has no externalId
 }
 
 // Empty reports whether the full walk found the two sides in agreement.
 func (d Drift) Empty() bool {
-	return len(d.AbsentFromDirectory) == 0 && len(d.ShouldBeDisabled) == 0 && len(d.MissingPickerID) == 0
+	return len(d.AbsentFromDirectory) == 0 && len(d.ShouldBeDisabled) == 0 && len(d.MissingExternalID) == 0
 }
 
 // Options configures a Syncer.
@@ -163,7 +163,7 @@ func (s *Syncer) DryRun() bool { return s.dryRun }
 //
 // The checkpoint advances only when the whole cycle succeeded. A partial cycle
 // that advanced the watermark would lose records permanently, and the failure
-// would be silent — it surfaces weeks later as one picker nobody blocked.
+// would be silent — it surfaces weeks later as one helpper nobody blocked.
 func (s *Syncer) Incremental(ctx context.Context) (Stats, error) {
 	started := s.now()
 	cp, err := s.st.Checkpoint(ctx)
@@ -211,7 +211,7 @@ func (s *Syncer) Full(ctx context.Context) (Stats, Drift, error) {
 			drift.ShouldBeDisabled = append(drift.ShouldBeDisabled, u.ID)
 		}
 		if r.externalIDBefore == "" {
-			drift.MissingPickerID = append(drift.MissingPickerID, u.ID)
+			drift.MissingExternalID = append(drift.MissingExternalID, u.ID)
 		}
 	})
 	stats.Duration = s.now().Sub(started)
@@ -219,9 +219,9 @@ func (s *Syncer) Full(ctx context.Context) (Stats, Drift, error) {
 		return stats, drift, err
 	}
 
-	local, err := s.st.EnabledPickers(ctx)
+	local, err := s.st.EnabledHelppers(ctx)
 	if err != nil {
-		return stats, drift, fmt.Errorf("list enabled pickers: %w", err)
+		return stats, drift, fmt.Errorf("list enabled helppers: %w", err)
 	}
 	for _, p := range local {
 		if !seen[p.DirectoryID] {
@@ -232,8 +232,8 @@ func (s *Syncer) Full(ctx context.Context) (Stats, Drift, error) {
 		}
 	}
 	if !drift.Empty() {
-		s.alert("directory drift detected: absent=%d should_be_disabled=%d missing_picker_id=%d",
-			len(drift.AbsentFromDirectory), len(drift.ShouldBeDisabled), len(drift.MissingPickerID))
+		s.alert("directory drift detected: absent=%d should_be_disabled=%d missing_external_id=%d",
+			len(drift.AbsentFromDirectory), len(drift.ShouldBeDisabled), len(drift.MissingExternalID))
 	}
 
 	stats.Checkpoint, err = s.advance(ctx, cp, watermark)
@@ -318,8 +318,8 @@ func (s *Syncer) advance(ctx context.Context, current, watermark time.Time) (tim
 	return watermark, nil
 }
 
-// dryRunPickerID stands in for the id a real store would have assigned.
-const dryRunPickerID = "(assigned on a real run)"
+// dryRunHelpperID stands in for the id a real store would have assigned.
+const dryRunHelpperID = "(assigned on a real run)"
 
 // record is the state of one identity as it was *before* this cycle touched it.
 type record struct {
@@ -344,7 +344,7 @@ func (s *Syncer) apply(ctx context.Context, u scim.User, stats *Stats) (record, 
 	}
 	r := record{activeNow: *u.Active}
 
-	p, err := s.st.PickerByDirectoryID(ctx, u.ID)
+	p, err := s.st.HelpperByDirectoryID(ctx, u.ID)
 	switch {
 	case errors.Is(err, store.ErrNotFound):
 		if !r.activeNow {
@@ -352,7 +352,7 @@ func (s *Syncer) apply(ctx context.Context, u scim.User, stats *Stats) (record, 
 			stats.Skipped++
 			return r, nil
 		}
-		p, err = s.ensurePicker(ctx, u, stats)
+		p, err = s.ensureHelpper(ctx, u, stats)
 		if err != nil {
 			return r, err
 		}
@@ -394,37 +394,37 @@ func validate(u scim.User) string {
 	return ""
 }
 
-func (s *Syncer) ensurePicker(ctx context.Context, u scim.User, stats *Stats) (store.Picker, error) {
+func (s *Syncer) ensureHelpper(ctx context.Context, u scim.User, stats *Stats) (store.Helpper, error) {
 	if s.dryRun {
 		stats.Created++
-		s.log.Info("would create picker", "directory_id", u.ID)
+		s.log.Info("would create helpper", "directory_id", u.ID)
 		// The id a real store would assign is unknowable here; the placeholder
 		// keeps the write-back accounted for without inventing a value that
 		// could be mistaken for one.
-		return store.Picker{DirectoryID: u.ID, ID: dryRunPickerID}, nil
+		return store.Helpper{DirectoryID: u.ID, ID: dryRunHelpperID}, nil
 	}
 
-	p, err := s.st.CreatePicker(ctx, store.NewPicker{
+	p, err := s.st.CreateHelpper(ctx, store.NewHelpper{
 		DirectoryID: u.ID,
 		Login:       u.PrimaryEmail(),
 		DisplayName: u.DisplayName,
 	})
 	if errors.Is(err, store.ErrAlreadyExists) {
 		// Another worker won the race. Re-read and use theirs.
-		if p, err = s.st.PickerByDirectoryID(ctx, u.ID); err != nil {
-			return store.Picker{}, fmt.Errorf("re-read %s after create conflict: %w", u.ID, err)
+		if p, err = s.st.HelpperByDirectoryID(ctx, u.ID); err != nil {
+			return store.Helpper{}, fmt.Errorf("re-read %s after create conflict: %w", u.ID, err)
 		}
 		return p, nil
 	}
 	if err != nil {
-		return store.Picker{}, fmt.Errorf("create picker for %s: %w", u.ID, err)
+		return store.Helpper{}, fmt.Errorf("create helpper for %s: %w", u.ID, err)
 	}
 	stats.Created++
-	s.log.Info("picker created", "directory_id", u.ID, "picker_id", p.ID)
+	s.log.Info("helpper created", "directory_id", u.ID, "helpper_id", p.ID)
 	return p, nil
 }
 
-func (s *Syncer) syncState(ctx context.Context, u scim.User, p store.Picker, stats *Stats) error {
+func (s *Syncer) syncState(ctx context.Context, u scim.User, p store.Helpper, stats *Stats) error {
 	active := *u.Active
 	login := u.PrimaryEmail()
 
@@ -434,12 +434,12 @@ func (s *Syncer) syncState(ctx context.Context, u scim.User, p store.Picker, sta
 	}
 
 	if !s.dryRun {
-		if err := s.st.UpdatePicker(ctx, p.ID, store.PickerUpdate{
+		if err := s.st.UpdateHelpper(ctx, p.ID, store.HelpperUpdate{
 			Enabled:     active,
 			DisplayName: u.DisplayName,
 			Login:       login,
 		}); err != nil {
-			return fmt.Errorf("update picker %s: %w", p.ID, err)
+			return fmt.Errorf("update helpper %s: %w", p.ID, err)
 		}
 	}
 
@@ -450,27 +450,27 @@ func (s *Syncer) syncState(ctx context.Context, u scim.User, p store.Picker, sta
 	switch {
 	case p.Enabled && !active:
 		stats.Disabled++
-		s.log.Info(verb+"disable picker", "directory_id", u.ID, "picker_id", p.ID)
+		s.log.Info(verb+"disable helpper", "directory_id", u.ID, "helpper_id", p.ID)
 	case !p.Enabled && active:
 		stats.Enabled++
-		s.log.Info(verb+"re-enable picker", "directory_id", u.ID, "picker_id", p.ID)
+		s.log.Info(verb+"re-enable helpper", "directory_id", u.ID, "helpper_id", p.ID)
 	default:
 		stats.Updated++
 	}
 	return nil
 }
 
-func (s *Syncer) writeBack(ctx context.Context, directoryID, pickerID string, stats *Stats) error {
-	if pickerID == "" {
-		return fmt.Errorf("refusing to write back an empty picker id for %s", directoryID)
+func (s *Syncer) writeBack(ctx context.Context, directoryID, helpperID string, stats *Stats) error {
+	if helpperID == "" {
+		return fmt.Errorf("refusing to write back an empty helpper id for %s", directoryID)
 	}
 	if s.dryRun {
 		stats.WroteBack++
-		s.log.Info("would write back picker_id", "directory_id", directoryID, "picker_id", pickerID)
+		s.log.Info("would write back helpper_id", "directory_id", directoryID, "helpper_id", helpperID)
 		return nil
 	}
 
-	_, err := s.dir.PatchExternalID(ctx, directoryID, pickerID)
+	_, err := s.dir.PatchExternalID(ctx, directoryID, helpperID)
 	if err == nil {
 		stats.WroteBack++
 		return nil
@@ -478,16 +478,16 @@ func (s *Syncer) writeBack(ctx context.Context, directoryID, pickerID string, st
 
 	var scimErr *scim.Error
 	if errors.As(err, &scimErr) && scimErr.Conflict() {
-		// The picker_id is already bound to a different directory identity.
+		// The identifier is already bound to a different directory identity.
 		// Retrying cannot fix it, and this record is re-read every cycle, so
 		// the alert is raised once per identity rather than every five minutes.
 		stats.Conflicts++
 		s.alertOnce("conflict:"+directoryID,
-			"write-back conflict: picker %s is already bound to another identity (directory_id=%s): %v",
-			pickerID, directoryID, scimErr)
+			"write-back conflict: helpper %s is already bound to another identity (directory_id=%s): %v",
+			helpperID, directoryID, scimErr)
 		return nil
 	}
-	return fmt.Errorf("write back picker_id for %s: %w", directoryID, err)
+	return fmt.Errorf("write back helpper_id for %s: %w", directoryID, err)
 }
 
 // alertOnce raises an alert the first time a given key occurs in this process.

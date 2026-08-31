@@ -27,7 +27,7 @@ remove a person; only Helppi can.
 | `userName`, `emails[].value` | Alias at `@separador.app`, in e-mail shape | Helppi |
 | `displayName`, `name` | Abbreviated name, e.g. `Marcio C.` | Helppi |
 | `active` | Whether the person may work | Helppi |
-| `externalId` | The partner's own identifier — `picker_id` | **Partner** |
+| `externalId` | The partner's own identifier for this person | **Partner** |
 
 The directory `id` is the only key the two sides match on. Never match by
 `userName`, `displayName` or e-mail: aliases and names change, and matching on
@@ -43,7 +43,7 @@ the reason the alias exists (§05).
                  active:true, unknown to us
                             │
                             ▼
-   ┌────────── create picker, PATCH externalId ──────────┐
+   ┌────────── create helpper, PATCH externalId ──────────┐
    │                                                     │
    ▼                                                     │
 enabled ──── active:false ────► disabled ── active:true ─┘
@@ -57,17 +57,17 @@ Three rules follow, and this client enforces all three:
 
 1. **A person who is inactive and unknown is never created.** Creating a
    disabled account is worse than not having it: it looks like access.
-2. **Reactivation reuses the same picker.** The directory `id` is the key, so a
+2. **Reactivation reuses the same helpper.** The directory `id` is the key, so a
    person who leaves and returns is the same account, not a second one.
 3. **Absence never deprovisions.** A termination always arrives explicitly as
    `active: false` while the record is still visible. A record that vanishes is
    a record whose retention window ended — the disable arrived long before. If
-   an enabled picker is missing from a full walk, that is *drift* to report, not
+   an enabled helpper is missing from a full walk, that is *drift* to report, not
    an instruction to act on.
 
 ## The write-back (§07)
 
-After creating the picker, write your identifier back to the directory record:
+After creating the helpper, write your identifier back to the directory record:
 
 ```http
 PATCH /Users/hlp_8fK2Lm91
@@ -123,12 +123,12 @@ rejected rather than interpreted. A proxy error page must never be read as
 |---|---|---|
 | Only `externalId` is ever written | `scim.Client.PatchExternalID` | `TestPatchExternalIDSendsTheContractualBody` |
 | Matching is by directory `id` | `directory.Syncer.apply` | `TestSuspensionThenReactivation` |
-| Inactive and unknown is not created | `directory.Syncer.apply` | `TestFirstCycleCreatesActivePickersAndWritesBack` |
+| Inactive and unknown is not created | `directory.Syncer.apply` | `TestFirstCycleCreatesActiveHelppersAndWritesBack` |
 | Absence never deprovisions | `directory.Syncer.Full` | `TestFullReportsDriftWithoutDeprovisioning` |
 | A missing `active` is never "disabled" | `directory.validate` | `TestMalformedRecordIsSkippedNotFatal` |
 | The checkpoint holds on failure | `directory.Syncer.advance` | `TestFailedCycleIsRetriedFromTheSameCheckpoint` |
 | The echo of our own write is a no-op | idempotent `apply` | `TestPartnerWriteBackEchoIsHarmless` |
-| One identity, one picker, under races | unique index + `ensurePicker` | `TestCreateRaceFallsBackToTheExistingPicker` |
+| One identity, one helpper, under races | unique index + `ensureHelpper` | `TestCreateRaceFallsBackToTheExistingHelpper` |
 | A proxy page is not an empty directory | `scim.Client.attempt` | `TestRejectsAnHTMLResponseInsteadOfReadingItAsAnEmptyDirectory` |
 
 ## What the fake directory does not do

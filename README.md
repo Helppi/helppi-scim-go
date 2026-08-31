@@ -19,7 +19,7 @@ partner starts from a working reconciler rather than from a specification.
   including the failures that matter: `403`, `409`, `429`, `5xx`, malformed
   records, broken pagination, and responses that are not SCIM at all.
 - **`testdata/directory.json` is the conformance set**: the five lifecycle
-  states from the proposal plus the `picker_id` write-back cases. Both sides can
+  states from the proposal plus the `externalId` write-back cases. Both sides can
   test against the same bytes.
 
 ```bash
@@ -38,8 +38,8 @@ not to the directory, not even to the checkpoint.
 
 The worker **refuses** to run for real against a directory with the in-memory
 store, and that guard is deliberate: an empty store makes every record look new,
-so it would create fresh pickers and `PATCH` their invented ids over the real
-`picker_id` values. That corrupts data on Helppi's side. Plug in a real
+so it would create fresh helppers and `PATCH` their invented ids over the real
+`externalId` values. That corrupts data on Helppi's side. Plug in a real
 `store.Store` first.
 
 ## Quickstart
@@ -74,7 +74,7 @@ There is no ordering to preserve and no event to lose, so the worker can be
 killed and restarted at any point.
 
 ```
-every 5 min ──► incremental cycle ──► apply(record) ──► write back picker_id
+every 5 min ──► incremental cycle ──► apply(record) ──► write back externalId
                        │                                        │
              checkpoint advances only if                  409 ⇒ alert once,
              the cycle completed in full                  never retried
@@ -85,7 +85,7 @@ every 24 h ─► full walk ──► drift report
 
 | Package | Responsibility |
 |---|---|
-| `scim` | Protocol: types, HTTP client, pagination, retry. Knows nothing about pickers. |
+| `scim` | Protocol: types, HTTP client, pagination, retry. Knows nothing about helppers. |
 | `store` | The local-side contract, plus an in-memory implementation and a contract test suite. |
 | `directory` | The reconciler. Knows nothing about HTTP. |
 | `scimtest` | Fake directory with fault injection. |
@@ -106,7 +106,7 @@ every 24 h ─► full walk ──► drift report
    disables the entire fleet. `nil` is refused, never read as "disabled".
 2. **The checkpoint advances only when the cycle completes.** A partial cycle
    that advanced the watermark loses records permanently and silently; the
-   symptom shows up weeks later as one picker nobody blocked.
+   symptom shows up weeks later as one helpper nobody blocked.
 3. **The watermark comes from `meta.lastModified`, not the local clock.** Clock
    skew between two companies stops mattering. A timestamp implausibly far in
    the future is refused rather than trusted.
@@ -139,7 +139,7 @@ every 24 h ─► full walk ──► drift report
   "a termination reaches the partner within N minutes", and it catches a stuck
   worker even when nothing is erroring.
 - **Run exactly one instance.** Two replicas on the same schedule will both try
-  to create pickers on the first sync. The unique index prevents duplicates, but
+  to create helppers on the first sync. The unique index prevents duplicates, but
   the `409` storm is avoidable: use a lease, a Postgres advisory lock, or
   `concurrencyPolicy: Forbid`.
 
@@ -148,7 +148,7 @@ every 24 h ─► full walk ──► drift report
 One-tap browser access (sections 09 to 11 of the proposal) is not here. It is an
 ordinary OpenID Connect client — `golang.org/x/oauth2` plus
 `github.com/coreos/go-oidc` — whose callback does
-`sub → pickers.directory_id → session`. The alternative path, with a signed
+`sub → helppers.directory_id → session`. The alternative path, with a signed
 launch URL, is a JWT verification plus a single-use record.
 
 ## License

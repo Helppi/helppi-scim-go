@@ -18,7 +18,7 @@ func TestMemoryStoreSatisfiesTheContract(t *testing.T) {
 
 func TestMemoryStoreIsMarkedEphemeral(t *testing.T) {
 	// The worker refuses to point an ephemeral store at a real directory: an
-	// empty store makes every record look new, so it would mint fresh picker
+	// empty store makes every record look new, so it would mint fresh helpper
 	// ids and overwrite the real ones.
 	if !store.IsEphemeral(memory.New(nil)) {
 		t.Fatal("the in-memory store must declare itself ephemeral")

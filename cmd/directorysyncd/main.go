@@ -1,4 +1,4 @@
-// Command directorysyncd keeps the local picker base converged with the Helppi
+// Command directorysyncd keeps the local helpper base converged with the Helppi
 // partner directory.
 //
 // It runs two loops: a frequent incremental cycle and a daily full walk. Both
@@ -6,7 +6,7 @@
 // without losing anything.
 //
 // IMPORTANT: run exactly one instance. Two replicas on the same schedule will
-// both try to create pickers on the first sync; the unique index on
+// both try to create helppers on the first sync; the unique index on
 // directory_id is what saves you, but the resulting 409 storm is avoidable.
 // Use a lease, a Postgres advisory lock, or a CronJob with
 // concurrencyPolicy: Forbid.
@@ -77,11 +77,11 @@ func run() error {
 	var st store.Store = memory.New(nil)
 
 	// An empty store makes every directory record look new, so the worker would
-	// mint fresh picker ids and write them over the real ones. Refusing here is
+	// mint fresh helpper ids and write them over the real ones. Refusing here is
 	// the difference between a demo and a data-loss incident.
 	if store.IsEphemeral(st) && !*dryRun && !*allowMemory {
 		return errors.New("refusing to run against a real directory with an in-memory store: " +
-			"it would create new pickers and overwrite every picker_id in the directory. " +
+			"it would create new helppers and overwrite every externalId in the directory. " +
 			"Use -dry-run to see what a cycle would do, plug in a real store.Store, " +
 			"or pass -allow-ephemeral-store if this really is a throwaway directory")
 	}
@@ -137,7 +137,7 @@ func run() error {
 			"conflicts", stats.Conflicts,
 			"absent_from_directory", len(drift.AbsentFromDirectory),
 			"should_be_disabled", len(drift.ShouldBeDisabled),
-			"missing_picker_id", len(drift.MissingPickerID),
+			"missing_external_id", len(drift.MissingExternalID),
 			"duration_ms", stats.Duration.Milliseconds())
 	}
 
@@ -190,7 +190,7 @@ func run() error {
 
 // preflight asks the directory what it supports instead of assuming. A
 // directory without filter support cannot be synchronized incrementally, and
-// one without PATCH cannot receive the picker_id — both are better discovered
+// one without PATCH cannot receive our identifier — both are better discovered
 // at startup than at 03:00.
 func preflight(ctx context.Context, client *scim.Client, log *slog.Logger) error {
 	cfg, err := client.ServiceProviderConfig(ctx)
@@ -209,7 +209,7 @@ func preflight(ctx context.Context, client *scim.Client, log *slog.Logger) error
 	}
 	if !cfg.Patch.Supported {
 		return errors.New("preflight: the directory reports no PATCH support, " +
-			"so the picker_id cannot be written back")
+			"so our identifier cannot be written back")
 	}
 	log.Info("preflight ok", "filter_max_results", cfg.Filter.MaxResults)
 	return nil

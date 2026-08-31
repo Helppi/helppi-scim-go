@@ -10,7 +10,7 @@ import (
 	"github.com/Helppi/helppi-scim-go/store"
 )
 
-func TestFirstCycleCreatesActivePickersAndWritesBack(t *testing.T) {
+func TestFirstCycleCreatesActiveHelppersAndWritesBack(t *testing.T) {
 	h := newHarness(t, "directory.json", directory.Options{})
 
 	stats, err := h.syncer.Incremental(context.Background())
@@ -20,7 +20,7 @@ func TestFirstCycleCreatesActivePickersAndWritesBack(t *testing.T) {
 	if stats.Scanned != 6 {
 		t.Errorf("scanned = %d, want 6", stats.Scanned)
 	}
-	// Four records are active; the two inactive ones must NOT produce a picker.
+	// Four records are active; the two inactive ones must NOT produce a helpper.
 	if stats.Created != 4 {
 		t.Errorf("created = %d, want 4", stats.Created)
 	}
@@ -28,11 +28,11 @@ func TestFirstCycleCreatesActivePickersAndWritesBack(t *testing.T) {
 		t.Errorf("skipped = %d, want 2 (inactive and unknown)", stats.Skipped)
 	}
 	if got := len(h.store.All()); got != 4 {
-		t.Fatalf("local pickers = %d, want 4", got)
+		t.Fatalf("local helppers = %d, want 4", got)
 	}
 	for _, p := range h.store.All() {
 		if p.DirectoryID == "hlp_9xB2Rt77" || p.DirectoryID == "hlp_2wT6Yn53" {
-			t.Errorf("created a picker for inactive identity %s", p.DirectoryID)
+			t.Errorf("created a helpper for inactive identity %s", p.DirectoryID)
 		}
 	}
 	if stats.WroteBack != 4 {
@@ -40,9 +40,9 @@ func TestFirstCycleCreatesActivePickersAndWritesBack(t *testing.T) {
 	}
 	for _, patch := range h.dir.Patches() {
 		u, _ := h.dir.User(patch.ID)
-		p, err := h.store.PickerByDirectoryID(context.Background(), patch.ID)
+		p, err := h.store.HelpperByDirectoryID(context.Background(), patch.ID)
 		if err != nil {
-			t.Fatalf("missing local picker for %s", patch.ID)
+			t.Fatalf("missing local helpper for %s", patch.ID)
 		}
 		if u.ExternalID != p.ID {
 			t.Errorf("%s: externalId = %q, want %q", patch.ID, u.ExternalID, p.ID)
@@ -89,9 +89,9 @@ func TestSuspensionThenReactivation(t *testing.T) {
 	if stats.Disabled != 1 {
 		t.Errorf("disabled = %d, want 1", stats.Disabled)
 	}
-	p, _ := h.store.PickerByDirectoryID(ctx, "hlp_5kM1Zc08")
+	p, _ := h.store.HelpperByDirectoryID(ctx, "hlp_5kM1Zc08")
 	if p.Enabled {
-		t.Error("picker still enabled after the directory reported active:false")
+		t.Error("helpper still enabled after the directory reported active:false")
 	}
 
 	h.dir.Touch("hlp_5kM1Zc08", newestFixture.Add(2*time.Minute), func(u *scim.User) { u.Active = active(true) })
@@ -102,11 +102,11 @@ func TestSuspensionThenReactivation(t *testing.T) {
 	if stats.Enabled != 1 {
 		t.Errorf("enabled = %d, want 1", stats.Enabled)
 	}
-	if p, _ = h.store.PickerByDirectoryID(ctx, "hlp_5kM1Zc08"); !p.Enabled {
-		t.Error("picker not re-enabled")
+	if p, _ = h.store.HelpperByDirectoryID(ctx, "hlp_5kM1Zc08"); !p.Enabled {
+		t.Error("helpper not re-enabled")
 	}
 	if stats.Created != 0 {
-		t.Error("reactivation created a second picker; the directory id must be reused")
+		t.Error("reactivation created a second helpper; the directory id must be reused")
 	}
 }
 
@@ -304,7 +304,7 @@ func TestDryRunWritesNothingAnywhere(t *testing.T) {
 		t.Errorf("dry run should still report what it would do: %+v", stats)
 	}
 	if got := len(h.store.All()); got != 0 {
-		t.Errorf("dry run created %d local pickers, want 0", got)
+		t.Errorf("dry run created %d local helppers, want 0", got)
 	}
 	if got := len(h.dir.Patches()); got != 0 {
 		t.Errorf("dry run sent %d PATCHes, want 0", got)
@@ -405,7 +405,7 @@ func TestFullReportsDriftWithoutDeprovisioning(t *testing.T) {
 	h := newHarness(t, "directory.json", directory.Options{})
 	ctx := context.Background()
 
-	ghost, err := h.store.CreatePicker(ctx, store.NewPicker{
+	ghost, err := h.store.CreateHelpper(ctx, store.NewHelpper{
 		DirectoryID: "hlp_0000Gone", Login: "gone@separador.app", DisplayName: "Ghost G.",
 	})
 	if err != nil {
@@ -419,20 +419,20 @@ func TestFullReportsDriftWithoutDeprovisioning(t *testing.T) {
 	if len(drift.AbsentFromDirectory) != 1 || drift.AbsentFromDirectory[0] != "hlp_0000Gone" {
 		t.Fatalf("AbsentFromDirectory = %v, want [hlp_0000Gone]", drift.AbsentFromDirectory)
 	}
-	still, _ := h.store.PickerByDirectoryID(ctx, ghost.DirectoryID)
+	still, _ := h.store.HelpperByDirectoryID(ctx, ghost.DirectoryID)
 	if !still.Enabled {
-		t.Error("full walk disabled a picker missing from the directory; absence is not a deprovisioning signal")
+		t.Error("full walk disabled a helpper missing from the directory; absence is not a deprovisioning signal")
 	}
 	if h.alertCount() == 0 {
 		t.Error("drift was not alerted")
 	}
 }
 
-func TestFullDetectsAPickerTheIncrementalPathMissed(t *testing.T) {
+func TestFullDetectsAHelpperTheIncrementalPathMissed(t *testing.T) {
 	h := newHarness(t, "directory.json", directory.Options{})
 	ctx := context.Background()
 
-	if _, err := h.store.CreatePicker(ctx, store.NewPicker{
+	if _, err := h.store.CreateHelpper(ctx, store.NewHelpper{
 		DirectoryID: "hlp_9xB2Rt77", Login: "9xb2rt77@separador.app", DisplayName: "Bruno S.",
 	}); err != nil {
 		t.Fatal(err)
@@ -445,17 +445,17 @@ func TestFullDetectsAPickerTheIncrementalPathMissed(t *testing.T) {
 	if len(drift.ShouldBeDisabled) != 1 || drift.ShouldBeDisabled[0] != "hlp_9xB2Rt77" {
 		t.Fatalf("ShouldBeDisabled = %v, want [hlp_9xB2Rt77]", drift.ShouldBeDisabled)
 	}
-	if p, _ := h.store.PickerByDirectoryID(ctx, "hlp_9xB2Rt77"); p.Enabled {
+	if p, _ := h.store.HelpperByDirectoryID(ctx, "hlp_9xB2Rt77"); p.Enabled {
 		t.Error("full walk reported the drift but did not converge it")
 	}
 }
 
-func TestFullReportsAMissingPickerID(t *testing.T) {
+func TestFullReportsAMissingExternalID(t *testing.T) {
 	h := newHarness(t, "directory.json", directory.Options{})
 	ctx := context.Background()
 
 	// hlp_8fK2Lm91 carries no externalId in the fixture.
-	if _, err := h.store.CreatePicker(ctx, store.NewPicker{
+	if _, err := h.store.CreateHelpper(ctx, store.NewHelpper{
 		DirectoryID: "hlp_8fK2Lm91", Login: "8fk2lm91@separador.app", DisplayName: "Marcio C.",
 	}); err != nil {
 		t.Fatal(err)
@@ -465,16 +465,16 @@ func TestFullReportsAMissingPickerID(t *testing.T) {
 	if err != nil {
 		t.Fatalf("full: %v", err)
 	}
-	if len(drift.MissingPickerID) != 1 || drift.MissingPickerID[0] != "hlp_8fK2Lm91" {
-		t.Fatalf("MissingPickerID = %v, want [hlp_8fK2Lm91]", drift.MissingPickerID)
+	if len(drift.MissingExternalID) != 1 || drift.MissingExternalID[0] != "hlp_8fK2Lm91" {
+		t.Fatalf("MissingExternalID = %v, want [hlp_8fK2Lm91]", drift.MissingExternalID)
 	}
 }
 
-func TestCreateRaceFallsBackToTheExistingPicker(t *testing.T) {
+func TestCreateRaceFallsBackToTheExistingHelpper(t *testing.T) {
 	h := newHarness(t, "directory.json", directory.Options{})
 	ctx := context.Background()
 
-	existing, err := h.store.CreatePicker(ctx, store.NewPicker{
+	existing, err := h.store.CreateHelpper(ctx, store.NewHelpper{
 		DirectoryID: "hlp_8fK2Lm91", Login: "8fk2lm91@separador.app", DisplayName: "Marcio C.",
 	})
 	if err != nil {
@@ -488,8 +488,8 @@ func TestCreateRaceFallsBackToTheExistingPicker(t *testing.T) {
 	if stats.Created != 3 {
 		t.Errorf("created = %d, want 3 (the fourth already existed)", stats.Created)
 	}
-	got, _ := h.store.PickerByDirectoryID(ctx, "hlp_8fK2Lm91")
+	got, _ := h.store.HelpperByDirectoryID(ctx, "hlp_8fK2Lm91")
 	if got.ID != existing.ID {
-		t.Errorf("picker id = %s, want the pre-existing %s — no duplicate may be created", got.ID, existing.ID)
+		t.Errorf("helpper id = %s, want the pre-existing %s — no duplicate may be created", got.ID, existing.ID)
 	}
 }

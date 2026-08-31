@@ -15,11 +15,11 @@ import (
 	"github.com/Helppi/helppi-scim-go/store"
 )
 
-// Store keeps pickers in memory. Safe for concurrent use.
+// Store keeps helppers in memory. Safe for concurrent use.
 type Store struct {
 	mu         sync.RWMutex
-	byDirID    map[string]*store.Picker
-	byID       map[string]*store.Picker
+	byDirID    map[string]*store.Helpper
+	byID       map[string]*store.Helpper
 	nextID     int64
 	checkpoint time.Time
 	now        func() time.Time
@@ -31,8 +31,8 @@ func New(now func() time.Time) *Store {
 		now = time.Now
 	}
 	return &Store{
-		byDirID: map[string]*store.Picker{},
-		byID:    map[string]*store.Picker{},
+		byDirID: map[string]*store.Helpper{},
+		byID:    map[string]*store.Helpper{},
 		nextID:  900000,
 		now:     now,
 	}
@@ -41,26 +41,26 @@ func New(now func() time.Time) *Store {
 // Ephemeral marks this store as losing everything on restart.
 func (s *Store) Ephemeral() bool { return true }
 
-func (s *Store) PickerByDirectoryID(_ context.Context, directoryID string) (store.Picker, error) {
+func (s *Store) HelpperByDirectoryID(_ context.Context, directoryID string) (store.Helpper, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	p, ok := s.byDirID[directoryID]
 	if !ok {
-		return store.Picker{}, store.ErrNotFound
+		return store.Helpper{}, store.ErrNotFound
 	}
 	return *p, nil
 }
 
-func (s *Store) CreatePicker(_ context.Context, in store.NewPicker) (store.Picker, error) {
+func (s *Store) CreateHelpper(_ context.Context, in store.NewHelpper) (store.Helpper, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if _, ok := s.byDirID[in.DirectoryID]; ok {
 		// Mirrors a unique-index violation in a real database.
-		return store.Picker{}, store.ErrAlreadyExists
+		return store.Helpper{}, store.ErrAlreadyExists
 	}
 	s.nextID++
 	now := s.now()
-	p := &store.Picker{
+	p := &store.Helpper{
 		ID:          fmt.Sprintf("%d", s.nextID),
 		DirectoryID: in.DirectoryID,
 		Login:       in.Login,
@@ -74,7 +74,7 @@ func (s *Store) CreatePicker(_ context.Context, in store.NewPicker) (store.Picke
 	return *p, nil
 }
 
-func (s *Store) UpdatePicker(_ context.Context, id string, upd store.PickerUpdate) error {
+func (s *Store) UpdateHelpper(_ context.Context, id string, upd store.HelpperUpdate) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	p, ok := s.byID[id]
@@ -88,10 +88,10 @@ func (s *Store) UpdatePicker(_ context.Context, id string, upd store.PickerUpdat
 	return nil
 }
 
-func (s *Store) EnabledPickers(_ context.Context) ([]store.Picker, error) {
+func (s *Store) EnabledHelppers(_ context.Context) ([]store.Helpper, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	out := make([]store.Picker, 0, len(s.byDirID))
+	out := make([]store.Helpper, 0, len(s.byDirID))
 	for _, p := range s.byDirID {
 		if p.Enabled {
 			out = append(out, *p)
@@ -114,11 +114,11 @@ func (s *Store) SetCheckpoint(_ context.Context, at time.Time) error {
 	return nil
 }
 
-// All returns every picker, ordered by directory id. Test helper.
-func (s *Store) All() []store.Picker {
+// All returns every helpper, ordered by directory id. Test helper.
+func (s *Store) All() []store.Helpper {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	out := make([]store.Picker, 0, len(s.byDirID))
+	out := make([]store.Helpper, 0, len(s.byDirID))
 	for _, p := range s.byDirID {
 		out = append(out, *p)
 	}
@@ -126,6 +126,6 @@ func (s *Store) All() []store.Picker {
 	return out
 }
 
-func sortByDirectoryID(ps []store.Picker) {
+func sortByDirectoryID(ps []store.Helpper) {
 	sort.Slice(ps, func(i, j int) bool { return ps[i].DirectoryID < ps[j].DirectoryID })
 }

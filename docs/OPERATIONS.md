@@ -4,8 +4,8 @@
 
 The worker refuses to start against a real directory with the in-memory store,
 and that guard is the most important line in this repository. An empty store
-makes every directory record look new: the worker would create fresh pickers and
-`PATCH` their invented ids over the real `picker_id` values — corrupting data on
+makes every directory record look new: the worker would create fresh helppers and
+`PATCH` their invented ids over the real `externalId` values — corrupting data on
 Helppi's side, not yours.
 
 So the first run is always a dry run:
@@ -20,7 +20,7 @@ you plug in a real store.
 
 ## Exactly one instance
 
-Two replicas on the same schedule both try to create pickers on the first sync.
+Two replicas on the same schedule both try to create helppers on the first sync.
 The unique index on `directory_id` prevents duplicates, but you get a burst of
 `409`s and a confusing first day. Pick one:
 
@@ -37,9 +37,9 @@ and `/readyz` (at least one cycle has completed).
 |---|---|
 | `directory_sync_lag_seconds` | Age of the checkpoint. **The one that matters.** |
 | `directory_sync_cycles_total` / `_failures_total` | Cycle throughput and failure rate |
-| `directory_pickers_created_total` | Creations; a spike means an onboarding wave — or an empty store |
-| `directory_pickers_disabled_total` | Disables applied; this is the access-removal path |
-| `directory_write_backs_total` | `picker_id` values returned to the directory |
+| `directory_helppers_created_total` | Creations; a spike means an onboarding wave — or an empty store |
+| `directory_helppers_disabled_total` | Disables applied; this is the access-removal path |
+| `directory_write_backs_total` | Identifiers returned to the directory as `externalId` |
 | `directory_write_back_conflicts_total` | Mapping conflicts; should be zero |
 | `directory_malformed_records_total` | Records the directory served that we could not use |
 | `directory_alerts_total` | Conditions no retry can fix |
@@ -61,13 +61,13 @@ process.
 never had the scope. The client does not retry these, on purpose: retrying a
 rejected credential just fills someone's log. Fix the token and restart.
 
-**A `409` alert.** Your `picker_id` is already bound to a different directory
-identity. Almost always a duplicate picker created before the unique index
+**A `409` alert.** Your identifier is already bound to a different directory
+identity. Almost always a duplicate helpper created before the unique index
 existed. Find both accounts, decide which survives, repoint it. The alert fires
 once per identity per process, so a restart tells you whether it is still there.
 
 **Drift is non-empty after the daily walk.** `should_be_disabled` or
-`missing_picker_id` mean the incremental path dropped something — check for
+`missing_external_id` mean the incremental path dropped something — check for
 failed cycles in the window. `absent_from_directory` is different: those people
 passed the retention window. Confirm they are already disabled locally; if one
 is still enabled, that is a real miss and worth understanding.

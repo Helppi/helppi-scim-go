@@ -24,10 +24,10 @@ the migration in the same bullet.
 
 ### Changed
 
-- **`store.Picker.ID` is now a `string`** (was `int64`), and `Picker.PickerID()`
-  is gone — use `Picker.ID`. A partner whose picker identifier is a UUID could
+- **`store.Helpper.ID` is now a `string`** (was `int64`), and `Helpper.HelpperID()`
+  is gone — use `Helpper.ID`. A partner whose helpper identifier is a UUID could
   not implement the old interface honestly.
-- **`Store.UpdatePicker` takes a `store.PickerUpdate`** instead of positional
+- **`Store.UpdateHelpper` takes a `store.HelpperUpdate`** instead of positional
   `enabled, displayName, login` arguments. Two adjacent strings were a silent
   swap waiting to happen.
 - `Stats` distinguishes `Skipped` (inactive and unknown) from `Unchanged`, and
@@ -39,7 +39,7 @@ the migration in the same bullet.
 
 - **The worker refuses to run against a real directory with an ephemeral
   store.** An empty store made every record look new, so a run with the default
-  in-memory store would create fresh pickers and overwrite every `picker_id` in
+  in-memory store would create fresh helppers and overwrite every `externalId` in
   the directory. This was reachable straight from the README's quickstart.
 - **One unusable record no longer halts synchronization forever.** It used to
   fail the cycle, which froze the checkpoint, which re-read the same record next
