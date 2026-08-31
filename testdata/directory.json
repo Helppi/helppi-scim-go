@@ -1,0 +1,90 @@
+[
+  {
+    "schemas": ["urn:ietf:params:scim:schemas:core:2.0:User"],
+    "id": "hlp_8fK2Lm91",
+    "userName": "8fk2lm91@separador.app",
+    "displayName": "Marcio C.",
+    "name": { "givenName": "Marcio", "familyName": "C." },
+    "emails": [{ "value": "8fk2lm91@separador.app", "primary": true }],
+    "active": true,
+    "meta": {
+      "resourceType": "User",
+      "created": "2026-05-01T13:42:00Z",
+      "lastModified": "2026-08-27T20:15:32Z"
+    }
+  },
+  {
+    "schemas": ["urn:ietf:params:scim:schemas:core:2.0:User"],
+    "id": "hlp_3vQ7Pd42",
+    "externalId": "782191",
+    "userName": "3vq7pd42@separador.app",
+    "displayName": "Ana P.",
+    "name": { "givenName": "Ana", "familyName": "P." },
+    "emails": [{ "value": "3vq7pd42@separador.app", "primary": true }],
+    "active": true,
+    "meta": {
+      "resourceType": "User",
+      "created": "2026-03-11T09:05:00Z",
+      "lastModified": "2026-08-20T11:02:10Z"
+    }
+  },
+  {
+    "schemas": ["urn:ietf:params:scim:schemas:core:2.0:User"],
+    "id": "hlp_9xB2Rt77",
+    "externalId": "782192",
+    "userName": "9xb2rt77@separador.app",
+    "displayName": "Bruno S.",
+    "name": { "givenName": "Bruno", "familyName": "S." },
+    "emails": [{ "value": "9xb2rt77@separador.app", "primary": true }],
+    "active": false,
+    "meta": {
+      "resourceType": "User",
+      "created": "2026-01-20T08:30:00Z",
+      "lastModified": "2026-08-26T18:44:01Z"
+    }
+  },
+  {
+    "schemas": ["urn:ietf:params:scim:schemas:core:2.0:User"],
+    "id": "hlp_5kM1Zc08",
+    "externalId": "782193",
+    "userName": "5km1zc08@separador.app",
+    "displayName": "Carla M.",
+    "name": { "givenName": "Carla", "familyName": "M." },
+    "emails": [{ "value": "5km1zc08@separador.app", "primary": true }],
+    "active": true,
+    "meta": {
+      "resourceType": "User",
+      "created": "2025-11-02T16:12:00Z",
+      "lastModified": "2026-08-27T07:19:45Z"
+    }
+  },
+  {
+    "schemas": ["urn:ietf:params:scim:schemas:core:2.0:User"],
+    "id": "hlp_2wT6Yn53",
+    "externalId": "782194",
+    "userName": "2wt6yn53@separador.app",
+    "displayName": "Diego F.",
+    "name": { "givenName": "Diego", "familyName": "F." },
+    "emails": [{ "value": "2wt6yn53@separador.app", "primary": true }],
+    "active": false,
+    "meta": {
+      "resourceType": "User",
+      "created": "2026-02-14T10:00:00Z",
+      "lastModified": "2026-08-25T22:03:12Z"
+    }
+  },
+  {
+    "schemas": ["urn:ietf:params:scim:schemas:core:2.0:User"],
+    "id": "hlp_7hJ4Ls21",
+    "userName": "7hj4ls21@separador.app",
+    "displayName": "Eduarda R.",
+    "name": { "givenName": "Eduarda", "familyName": "R." },
+    "emails": [{ "value": "7hj4ls21@separador.app", "primary": true }],
+    "active": true,
+    "meta": {
+      "resourceType": "User",
+      "created": "2026-08-27T19:00:00Z",
+      "lastModified": "2026-08-27T19:00:00Z"
+    }
+  }
+]
