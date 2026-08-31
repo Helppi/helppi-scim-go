@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"slices"
 	"strconv"
+	"strings"
 )
 
 // Error is the SCIM error payload (RFC 7644 §3.12).
@@ -65,12 +67,29 @@ func decodeError(resp *http.Response) *Error {
 	if err != nil || len(body) == 0 {
 		return e
 	}
-	// A non-SCIM error page (proxy, gateway) must not mask the status code.
+
+	// json.Unmarshal succeeds on ANY valid JSON, so a gateway answering
+	// {"message":"blocked"} would decode into an empty Error and throw the only
+	// useful text away. Accept the parse only when it actually looks like a
+	// SCIM error; otherwise keep the raw body, which is what an operator needs
+	// in order to recognise a WAF or a load balancer.
 	var parsed Error
-	if json.Unmarshal(body, &parsed) == nil {
+	if json.Unmarshal(body, &parsed) == nil && parsed.looksLikeSCIM() {
 		parsed.HTTPStatus = resp.StatusCode
 		return &parsed
 	}
-	e.Detail = string(body)
+	e.Detail = truncate(strings.TrimSpace(string(body)), 512)
 	return e
+}
+
+func (e Error) looksLikeSCIM() bool {
+	return slices.Contains(e.Schemas, SchemaError) ||
+		e.ScimType != "" || e.Detail != "" || e.Status != ""
+}
+
+func truncate(s string, max int) string {
+	if len(s) <= max {
+		return s
+	}
+	return s[:max] + "…"
 }

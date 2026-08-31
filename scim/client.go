@@ -10,6 +10,7 @@ import (
 	"math/rand/v2"
 	"net/http"
 	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -34,7 +35,9 @@ type Options struct {
 	MaxRetries int
 	// RequestsPerSecond throttles outbound calls. Zero disables throttling.
 	RequestsPerSecond float64
-	// UserAgent identifies this worker in the directory's audit log.
+	// UserAgent identifies your worker in the directory's audit log. Set it to
+	// something that names your company and service; the default names only
+	// this library.
 	UserAgent string
 
 	// Sleep is injectable so tests never actually wait.
@@ -105,7 +108,15 @@ func (c *Client) ListUsers(ctx context.Context, filter string, pageSize int, fn 
 	if pageSize <= 0 {
 		pageSize = DefaultPageSize
 	}
-	startIndex := 1
+
+	var (
+		startIndex   = 1
+		pages        int
+		maxPages     int // 0 until the first response tells us how many to expect
+		prevFirstID  string
+		totalScanned int
+	)
+
 	for {
 		q := url.Values{}
 		q.Set("startIndex", strconv.Itoa(startIndex))
@@ -118,17 +129,49 @@ func (c *Client) ListUsers(ctx context.Context, filter string, pageSize int, fn 
 		if err := c.do(ctx, http.MethodGet, "Users?"+q.Encode(), nil, &lr); err != nil {
 			return fmt.Errorf("list users at startIndex=%d: %w", startIndex, err)
 		}
+		// A response that is not a SCIM ListResponse must not be read as an
+		// empty directory: that turns a proxy error page into "nobody works
+		// here any more".
+		if !slices.Contains(lr.Schemas, SchemaList) {
+			return fmt.Errorf("scim: response at startIndex=%d is not a %s (schemas=%v)",
+				startIndex, SchemaList, lr.Schemas)
+		}
 		if len(lr.Resources) == 0 {
 			return nil
 		}
+
+		pages++
+		if maxPages == 0 && lr.TotalResults > 0 {
+			// Generous: the directory may grow while we walk it.
+			maxPages = lr.TotalResults/pageSize + 8
+		}
+
+		var firstID string
 		for i, raw := range lr.Resources {
 			var u User
 			if err := json.Unmarshal(raw, &u); err != nil {
 				return fmt.Errorf("decode record %d of page starting at %d: %w", i, startIndex, err)
 			}
+			if i == 0 {
+				firstID = u.ID
+			}
 			if err := fn(u); err != nil {
 				return err
 			}
+		}
+		totalScanned += len(lr.Resources)
+
+		// A directory that ignores startIndex (or a proxy caching page one)
+		// would otherwise keep us requesting the same page forever.
+		if firstID != "" && firstID == prevFirstID {
+			return fmt.Errorf("scim: directory returned the same first record (%s) twice at startIndex=%d; "+
+				"it appears to be ignoring startIndex", firstID, startIndex)
+		}
+		prevFirstID = firstID
+
+		if maxPages > 0 && pages >= maxPages {
+			return fmt.Errorf("scim: pagination did not terminate after %d pages (%d records read, "+
+				"totalResults=%d)", pages, totalScanned, lr.TotalResults)
 		}
 
 		startIndex += len(lr.Resources)
@@ -167,14 +210,16 @@ func (c *Client) PatchExternalID(ctx context.Context, id, externalID string) (*U
 	return &u, nil
 }
 
-// ServiceProviderConfig reports the directory's advertised capabilities. Worth
-// reading at startup instead of hard-coding page limits.
-func (c *Client) ServiceProviderConfig(ctx context.Context) (map[string]any, error) {
-	out := map[string]any{}
-	if err := c.do(ctx, http.MethodGet, "ServiceProviderConfig", nil, &out); err != nil {
+// ServiceProviderConfig reports the directory's advertised capabilities. Read
+// it at startup instead of assuming: a directory that does not support filter
+// makes incremental synchronization impossible, and one that does not support
+// PATCH makes the picker_id write-back impossible.
+func (c *Client) ServiceProviderConfig(ctx context.Context) (*ProviderConfig, error) {
+	var cfg ProviderConfig
+	if err := c.do(ctx, http.MethodGet, "ServiceProviderConfig", nil, &cfg); err != nil {
 		return nil, err
 	}
-	return out, nil
+	return &cfg, nil
 }
 
 func (c *Client) do(ctx context.Context, method, ref string, body []byte, out any) error {
@@ -182,73 +227,84 @@ func (c *Client) do(ctx context.Context, method, ref string, body []byte, out an
 	if err != nil {
 		return fmt.Errorf("scim: bad path %q: %w", ref, err)
 	}
+	target := u.String()
 
 	for attempt := 0; ; attempt++ {
 		if err := c.limiter.wait(ctx, c.sleep); err != nil {
 			return err
 		}
 
-		req, err := http.NewRequestWithContext(ctx, method, u.String(), nil)
-		if err != nil {
+		wait, retry, err := c.attempt(ctx, method, target, body, out)
+		if !retry {
 			return err
 		}
-		if body != nil {
-			// Rebuild the reader on every attempt: retrying a request whose
-			// body was already consumed is the classic Go retry bug.
-			req.Body = io.NopCloser(bytes.NewReader(body))
-			req.ContentLength = int64(len(body))
-			req.GetBody = func() (io.ReadCloser, error) {
-				return io.NopCloser(bytes.NewReader(body)), nil
-			}
-			req.Header.Set("Content-Type", ContentType)
+		if ctx.Err() != nil || attempt >= c.maxRetries {
+			return err
 		}
-		req.Header.Set("Accept", ContentType)
-		req.Header.Set("Authorization", "Bearer "+c.token)
-		req.Header.Set("User-Agent", c.userAgent)
-
-		resp, err := c.hc.Do(req)
-		if err != nil {
-			if ctx.Err() != nil || attempt >= c.maxRetries {
-				return fmt.Errorf("scim: %s %s: %w", method, ref, err)
-			}
-			if werr := c.sleep(ctx, c.backoff(attempt)); werr != nil {
-				return werr
-			}
-			continue
+		if wait <= 0 {
+			wait = c.backoff(attempt)
 		}
-
-		if (resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode >= 500) && attempt < c.maxRetries {
-			wait := c.backoff(attempt)
-			if after, ok := retryAfter(resp); ok {
-				wait = after
-			}
-			drain(resp)
-			if werr := c.sleep(ctx, wait); werr != nil {
-				return werr
-			}
-			continue
+		if werr := c.sleep(ctx, wait); werr != nil {
+			return werr
 		}
-		if resp.StatusCode >= 400 {
-			scimErr := decodeError(resp)
-			_ = resp.Body.Close()
-			return scimErr
-		}
-
-		defer resp.Body.Close()
-		if out == nil {
-			_, _ = io.Copy(io.Discard, resp.Body)
-			return nil
-		}
-		if err := json.NewDecoder(resp.Body).Decode(out); err != nil {
-			return fmt.Errorf("scim: decode %s %s: %w", method, ref, err)
-		}
-		return nil
 	}
 }
 
-func drain(resp *http.Response) {
-	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 1<<16))
-	_ = resp.Body.Close()
+// attempt performs exactly one request. Keeping it in its own function is what
+// lets the response body be closed with defer: a defer inside the retry loop
+// would hold every attempt's connection open until the whole call returned.
+//
+// It returns retry=true when the caller should back off and try again; err is
+// then the failure that would be reported if retries run out.
+func (c *Client) attempt(ctx context.Context, method, target string, body []byte, out any) (wait time.Duration, retry bool, err error) {
+	req, err := http.NewRequestWithContext(ctx, method, target, nil)
+	if err != nil {
+		return 0, false, err
+	}
+	if body != nil {
+		// Rebuild the reader on every attempt: retrying a request whose body
+		// was already consumed is the classic Go retry bug.
+		req.Body = io.NopCloser(bytes.NewReader(body))
+		req.ContentLength = int64(len(body))
+		req.GetBody = func() (io.ReadCloser, error) {
+			return io.NopCloser(bytes.NewReader(body)), nil
+		}
+		req.Header.Set("Content-Type", ContentType)
+	}
+	req.Header.Set("Accept", ContentType)
+	req.Header.Set("Authorization", "Bearer "+c.token)
+	req.Header.Set("User-Agent", c.userAgent)
+
+	resp, err := c.hc.Do(req)
+	if err != nil {
+		return 0, true, fmt.Errorf("scim: %s %s: %w", method, req.URL.Path, err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode >= 500 {
+		after, _ := retryAfter(resp)
+		scimErr := decodeError(resp)
+		return after, true, scimErr
+	}
+	if resp.StatusCode >= 400 {
+		return 0, false, decodeError(resp)
+	}
+	if out == nil {
+		_, _ = io.Copy(io.Discard, resp.Body)
+		return 0, false, nil
+	}
+
+	// A captive portal, a WAF block page or a misrouted proxy answers 200 with
+	// HTML. Decoding that yields a zero-value struct, which downstream reads as
+	// an empty directory — so refuse it here instead.
+	if ct := resp.Header.Get("Content-Type"); ct != "" && !strings.Contains(strings.ToLower(ct), "json") {
+		return 0, false, fmt.Errorf("scim: %s %s: expected a JSON response, got Content-Type %q",
+			method, req.URL.Path, ct)
+	}
+	if err := json.NewDecoder(resp.Body).Decode(out); err != nil {
+		return 0, false, fmt.Errorf("scim: decode %s %s: %w", method, req.URL.Path, err)
+	}
+	return 0, false, nil
 }
 
 // retryAfter understands both forms of the header: a delay in seconds, and an
@@ -270,13 +326,15 @@ func retryAfter(resp *http.Response) (time.Duration, bool) {
 	return 0, false
 }
 
+// defaultBackoff is equal jitter: half the exponential delay, plus a random
+// half. It spreads retries when many workers fail at the same moment without
+// letting any single wait collapse to zero.
 func defaultBackoff(attempt int) time.Duration {
 	base := time.Duration(1<<uint(attempt)) * 500 * time.Millisecond
 	if base > 30*time.Second {
 		base = 30 * time.Second
 	}
-	// Full jitter: spreads retries when many workers fail at the same moment.
-	return time.Duration(rand.Int64N(int64(base)) + int64(base)/2)
+	return base/2 + time.Duration(rand.Int64N(int64(base)/2+1))
 }
 
 func sleepCtx(ctx context.Context, d time.Duration) error {

@@ -1,9 +1,13 @@
 // Package memory is a reference Store for tests and for running the worker
-// against a directory without provisioning a database.
+// against a fake directory without provisioning a database.
+//
+// It is deliberately marked ephemeral: the worker refuses to point it at a real
+// directory, because an empty store would make every record look new.
 package memory
 
 import (
 	"context"
+	"fmt"
 	"sort"
 	"sync"
 	"time"
@@ -15,6 +19,7 @@ import (
 type Store struct {
 	mu         sync.RWMutex
 	byDirID    map[string]*store.Picker
+	byID       map[string]*store.Picker
 	nextID     int64
 	checkpoint time.Time
 	now        func() time.Time
@@ -25,8 +30,16 @@ func New(now func() time.Time) *Store {
 	if now == nil {
 		now = time.Now
 	}
-	return &Store{byDirID: map[string]*store.Picker{}, nextID: 900000, now: now}
+	return &Store{
+		byDirID: map[string]*store.Picker{},
+		byID:    map[string]*store.Picker{},
+		nextID:  900000,
+		now:     now,
+	}
 }
+
+// Ephemeral marks this store as losing everything on restart.
+func (s *Store) Ephemeral() bool { return true }
 
 func (s *Store) PickerByDirectoryID(_ context.Context, directoryID string) (store.Picker, error) {
 	s.mu.RLock()
@@ -48,7 +61,7 @@ func (s *Store) CreatePicker(_ context.Context, in store.NewPicker) (store.Picke
 	s.nextID++
 	now := s.now()
 	p := &store.Picker{
-		ID:          s.nextID,
+		ID:          fmt.Sprintf("%d", s.nextID),
 		DirectoryID: in.DirectoryID,
 		Login:       in.Login,
 		DisplayName: in.DisplayName,
@@ -57,20 +70,22 @@ func (s *Store) CreatePicker(_ context.Context, in store.NewPicker) (store.Picke
 		UpdatedAt:   now,
 	}
 	s.byDirID[in.DirectoryID] = p
+	s.byID[p.ID] = p
 	return *p, nil
 }
 
-func (s *Store) UpdatePicker(_ context.Context, id int64, enabled bool, displayName, login string) error {
+func (s *Store) UpdatePicker(_ context.Context, id string, upd store.PickerUpdate) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	for _, p := range s.byDirID {
-		if p.ID != id {
-			continue
-		}
-		p.Enabled, p.DisplayName, p.Login, p.UpdatedAt = enabled, displayName, login, s.now()
-		return nil
+	p, ok := s.byID[id]
+	if !ok {
+		return store.ErrNotFound
 	}
-	return store.ErrNotFound
+	p.Enabled = upd.Enabled
+	p.DisplayName = upd.DisplayName
+	p.Login = upd.Login
+	p.UpdatedAt = s.now()
+	return nil
 }
 
 func (s *Store) EnabledPickers(_ context.Context) ([]store.Picker, error) {
@@ -82,7 +97,7 @@ func (s *Store) EnabledPickers(_ context.Context) ([]store.Picker, error) {
 			out = append(out, *p)
 		}
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].DirectoryID < out[j].DirectoryID })
+	sortByDirectoryID(out)
 	return out, nil
 }
 
@@ -107,6 +122,10 @@ func (s *Store) All() []store.Picker {
 	for _, p := range s.byDirID {
 		out = append(out, *p)
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].DirectoryID < out[j].DirectoryID })
+	sortByDirectoryID(out)
 	return out
+}
+
+func sortByDirectoryID(ps []store.Picker) {
+	sort.Slice(ps, func(i, j int) bool { return ps[i].DirectoryID < ps[j].DirectoryID })
 }

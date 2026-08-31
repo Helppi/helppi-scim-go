@@ -74,6 +74,20 @@ func (u User) PrimaryEmail() string {
 	return u.UserName
 }
 
+// ProviderConfig is the subset of ServiceProviderConfig this client cares
+// about. A directory without filter support cannot be synchronized
+// incrementally; one without PATCH support cannot receive the picker_id.
+type ProviderConfig struct {
+	Schemas []string `json:"schemas"`
+	Patch   struct {
+		Supported bool `json:"supported"`
+	} `json:"patch"`
+	Filter struct {
+		Supported  bool `json:"supported"`
+		MaxResults int  `json:"maxResults"`
+	} `json:"filter"`
+}
+
 // ListResponse is the envelope of every query. Resources stays raw so a single
 // malformed record cannot destroy the whole page, and so unknown attributes
 // survive decoding untouched.

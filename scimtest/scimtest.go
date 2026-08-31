@@ -35,16 +35,26 @@ type fault struct {
 	retryAfter string
 }
 
+// rawResponse is an arbitrary reply, used to simulate the things that are not
+// SCIM at all: a WAF block page, a captive portal, a gateway's own JSON.
+type rawResponse struct {
+	status      int
+	contentType string
+	body        string
+}
+
 // Directory is a fake SCIM server.
 type Directory struct {
 	*httptest.Server
 
-	mu       sync.Mutex
-	users    []scim.User
-	bound    map[string]string // externalId -> directory id, to produce 409
-	faults   []fault
-	requests int
-	patches  []PatchRecord
+	mu               sync.Mutex
+	users            []scim.User
+	bound            map[string]string // externalId -> directory id, to produce 409
+	faults           []fault
+	raws             []rawResponse
+	requests         int
+	patches          []PatchRecord
+	ignoreStartIndex bool
 }
 
 // New starts a fake directory serving the given records and closes it when the
@@ -81,6 +91,22 @@ func Load(tb testing.TB, path string) []scim.User {
 		tb.Fatalf("decode fixture %s: %v", path, err)
 	}
 	return users
+}
+
+// RespondNextRaw queues one arbitrary reply, consumed by the next request. Use
+// it for responses that are not SCIM: an HTML error page, a gateway's own JSON.
+func (d *Directory) RespondNextRaw(status int, contentType, body string) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.raws = append(d.raws, rawResponse{status: status, contentType: contentType, body: body})
+}
+
+// IgnoreStartIndex makes the directory answer every query with the first page,
+// the way a broken pager or a caching proxy would.
+func (d *Directory) IgnoreStartIndex(v bool) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.ignoreStartIndex = v
 }
 
 // FailNext queues one synthetic failure, consumed by the next request.
@@ -148,8 +174,20 @@ func (d *Directory) handle(w http.ResponseWriter, r *http.Request) {
 	if len(d.faults) > 0 {
 		f, d.faults = &d.faults[0], d.faults[1:]
 	}
+	var raw *rawResponse
+	if len(d.raws) > 0 {
+		raw, d.raws = &d.raws[0], d.raws[1:]
+	}
 	d.mu.Unlock()
 
+	if raw != nil {
+		if raw.contentType != "" {
+			w.Header().Set("Content-Type", raw.contentType)
+		}
+		w.WriteHeader(raw.status)
+		_, _ = w.Write([]byte(raw.body))
+		return
+	}
 	if f != nil {
 		if f.retryAfter != "" {
 			w.Header().Set("Retry-After", f.retryAfter)
@@ -188,6 +226,11 @@ func (d *Directory) list(w http.ResponseWriter, r *http.Request) {
 	if startIndex < 1 {
 		startIndex = 1
 	}
+	d.mu.Lock()
+	if d.ignoreStartIndex {
+		startIndex = 1
+	}
+	d.mu.Unlock()
 	count, _ := strconv.Atoi(q.Get("count"))
 	if count <= 0 {
 		count = 100
@@ -268,6 +311,13 @@ func (d *Directory) patch(w http.ResponseWriter, r *http.Request, id string) {
 			d.writeError(w, http.StatusConflict, "uniqueness",
 				"externalId already assigned to another identity")
 			return
+		}
+		// Release whatever this identity was bound to before, so a corrected
+		// value does not collide with its own previous one.
+		for old, owner := range d.bound {
+			if owner == id && old != value {
+				delete(d.bound, old)
+			}
 		}
 		d.bound[value] = id
 		for i := range d.users {

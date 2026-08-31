@@ -5,7 +5,8 @@
 -- reconciler is a fast path, not a guarantee — two workers can both miss it.
 
 create table pickers (
-  id            bigserial   primary key,   -- this value is the picker_id written back
+  id            bigserial   primary key,   -- written back as externalId; scan it as text
+                                            -- (select id::text) since store.Picker.ID is a string
   directory_id  text        not null,      -- the ONLY match key. never login, never name
   login         text        not null,      -- alias published by the directory (@separador.app)
   display_name  text        not null,      -- abbreviated name, e.g. "Marcio C."

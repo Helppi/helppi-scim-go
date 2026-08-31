@@ -3,6 +3,8 @@ package scim_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -130,7 +132,7 @@ func TestCredentialErrorIsNotRetried(t *testing.T) {
 
 	err = c.ListUsers(context.Background(), "", 100, func(scim.User) error { return nil })
 	var se *scim.Error
-	if !asSCIM(err, &se) {
+	if !errors.As(err, &se) {
 		t.Fatalf("err = %v, want a *scim.Error", err)
 	}
 	if !se.Credential() {
@@ -144,7 +146,7 @@ func TestCredentialErrorIsNotRetried(t *testing.T) {
 func TestPatchExternalIDSendsTheContractualBody(t *testing.T) {
 	var body []byte
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		body, _ = readAll(r)
+		body, _ = io.ReadAll(r.Body)
 		w.Header().Set("Content-Type", scim.ContentType)
 		_, _ = w.Write([]byte(`{"id":"hlp_8fK2Lm91","externalId":"782195","active":true}`))
 	}))
@@ -177,7 +179,7 @@ func TestPatchConflictIsTyped(t *testing.T) {
 
 	_, err := c.PatchExternalID(context.Background(), "hlp_8fK2Lm91", "999999")
 	var se *scim.Error
-	if !asSCIM(err, &se) {
+	if !errors.As(err, &se) {
 		t.Fatalf("err = %v, want a *scim.Error", err)
 	}
 	if !se.Conflict() {

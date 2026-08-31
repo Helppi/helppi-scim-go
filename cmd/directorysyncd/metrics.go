@@ -23,6 +23,7 @@ type metrics struct {
 	disabled  atomic.Int64
 	wroteBack atomic.Int64
 	conflicts atomic.Int64
+	malformed atomic.Int64
 	alerts    atomic.Int64
 	lastMs    atomic.Int64
 }
@@ -37,6 +38,7 @@ func (m *metrics) record(s directory.Stats, err error) {
 	m.disabled.Add(int64(s.Disabled))
 	m.wroteBack.Add(int64(s.WroteBack))
 	m.conflicts.Add(int64(s.Conflicts))
+	m.malformed.Add(int64(s.Malformed))
 	m.lastMs.Store(s.Duration.Milliseconds())
 }
 
@@ -54,6 +56,7 @@ func (m *metrics) write(w io.Writer, checkpoint time.Time) {
 	fmt.Fprintf(w, "# TYPE directory_pickers_disabled_total counter\ndirectory_pickers_disabled_total %d\n", m.disabled.Load())
 	fmt.Fprintf(w, "# TYPE directory_write_backs_total counter\ndirectory_write_backs_total %d\n", m.wroteBack.Load())
 	fmt.Fprintf(w, "# TYPE directory_write_back_conflicts_total counter\ndirectory_write_back_conflicts_total %d\n", m.conflicts.Load())
+	fmt.Fprintf(w, "# TYPE directory_malformed_records_total counter\ndirectory_malformed_records_total %d\n", m.malformed.Load())
 	fmt.Fprintf(w, "# TYPE directory_alerts_total counter\ndirectory_alerts_total %d\n", m.alerts.Load())
 	fmt.Fprintf(w, "# TYPE directory_last_cycle_duration_ms gauge\ndirectory_last_cycle_duration_ms %d\n", m.lastMs.Load())
 }

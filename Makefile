@@ -1,4 +1,9 @@
-.PHONY: test vet lint build run-once
+.PHONY: ci test vet fmt build run-once dry-run
+
+ci: fmt vet test
+
+fmt:
+	@test -z "$$(gofmt -l . | tee /dev/stderr)" || (echo "gofmt: files need formatting" && exit 1)
 
 test:
 	go test ./... -race -count=1
@@ -9,7 +14,12 @@ vet:
 build:
 	go build -o bin/directorysyncd ./cmd/directorysyncd
 
-# Single full reconciliation against a real directory:
-#   DIRECTORY_BASE_URL=... DIRECTORY_TOKEN=... make run-once
+# Report what one cycle WOULD do, writing nothing anywhere. Always start here:
+#   DIRECTORY_BASE_URL=... DIRECTORY_TOKEN=... make dry-run
+dry-run:
+	go run ./cmd/directorysyncd -once -dry-run
+
+# Single full reconciliation. Requires a real store.Store; the worker refuses
+# to run against a real directory with the in-memory one.
 run-once:
 	go run ./cmd/directorysyncd -once

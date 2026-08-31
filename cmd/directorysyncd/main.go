@@ -27,10 +27,18 @@ import (
 
 	"github.com/Helppi/helppi-scim-go/directory"
 	"github.com/Helppi/helppi-scim-go/scim"
+	"github.com/Helppi/helppi-scim-go/store"
 	"github.com/Helppi/helppi-scim-go/store/memory"
 )
 
 func main() {
+	if err := run(); err != nil {
+		slog.Error("fatal", "err", err)
+		os.Exit(1)
+	}
+}
+
+func run() error {
 	var (
 		baseURL     = flag.String("base-url", os.Getenv("DIRECTORY_BASE_URL"), "directory base URL, e.g. https://.../scim/v2")
 		incremental = flag.Duration("incremental", envDuration("INCREMENTAL_INTERVAL", 5*time.Minute), "incremental cycle interval")
@@ -39,6 +47,10 @@ func main() {
 		rps         = flag.Float64("rps", 5, "max requests per second against the directory")
 		metricsAddr = flag.String("metrics-addr", ":9090", "address for /metrics and /healthz; empty disables")
 		once        = flag.Bool("once", false, "run a single full reconciliation and exit")
+		dryRun      = flag.Bool("dry-run", false, "report what a cycle would do; write nothing, anywhere")
+		allowMemory = flag.Bool("allow-ephemeral-store", false,
+			"permit the in-memory store against a real directory (DANGEROUS: see -dry-run)")
+		cycleTimeout = flag.Duration("cycle-timeout", 30*time.Minute, "abort a cycle that runs longer than this")
 	)
 	flag.Parse()
 
@@ -47,8 +59,7 @@ func main() {
 
 	token := os.Getenv("DIRECTORY_TOKEN")
 	if *baseURL == "" || token == "" {
-		log.Error("DIRECTORY_BASE_URL and DIRECTORY_TOKEN are required")
-		os.Exit(2)
+		return errors.New("DIRECTORY_BASE_URL and DIRECTORY_TOKEN are required")
 	}
 
 	client, err := scim.New(scim.Options{
@@ -58,17 +69,27 @@ func main() {
 		UserAgent:         "helppi-scim-go/1.0 (+sync worker)",
 	})
 	if err != nil {
-		log.Error("build client", "err", err)
-		os.Exit(1)
+		return fmt.Errorf("build client: %w", err)
 	}
 
-	// Swap this for the real store. The interface is store.Store; nothing in
-	// the reconciler knows which implementation it is talking to.
-	st := memory.New(nil)
-	m := &metrics{}
+	// Replace this with your own store.Store. The interface is in package
+	// store; nothing in the reconciler knows which implementation it talks to.
+	var st store.Store = memory.New(nil)
 
+	// An empty store makes every directory record look new, so the worker would
+	// mint fresh picker ids and write them over the real ones. Refusing here is
+	// the difference between a demo and a data-loss incident.
+	if store.IsEphemeral(st) && !*dryRun && !*allowMemory {
+		return errors.New("refusing to run against a real directory with an in-memory store: " +
+			"it would create new pickers and overwrite every picker_id in the directory. " +
+			"Use -dry-run to see what a cycle would do, plug in a real store.Store, " +
+			"or pass -allow-ephemeral-store if this really is a throwaway directory")
+	}
+
+	m := &metrics{}
 	syncer := directory.New(client, st, directory.Options{
 		PageSize: *pageSize,
+		DryRun:   *dryRun,
 		Logger:   log,
 		Alert: func(format string, args ...any) {
 			m.alerts.Add(1)
@@ -77,9 +98,16 @@ func main() {
 			log.Error("ALERT: " + fmt.Sprintf(format, args...))
 		},
 	})
+	if *dryRun {
+		log.Warn("dry run: no local writes, no directory writes, checkpoint frozen")
+	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
+
+	if err := preflight(ctx, client, log); err != nil {
+		return err
+	}
 
 	if *metricsAddr != "" {
 		go serveMetrics(ctx, log, *metricsAddr, m, st)
@@ -91,7 +119,11 @@ func main() {
 	runFull := func() {
 		cycle.Lock()
 		defer cycle.Unlock()
-		stats, drift, err := syncer.Full(ctx)
+
+		cycleCtx, cancel := context.WithTimeout(ctx, *cycleTimeout)
+		defer cancel()
+
+		stats, drift, err := syncer.Full(cycleCtx)
 		m.record(stats, err)
 		if err != nil {
 			log.Error("full cycle failed", "err", err, "scanned", stats.Scanned)
@@ -100,7 +132,9 @@ func main() {
 		log.Info("full cycle",
 			"scanned", stats.Scanned, "created", stats.Created,
 			"enabled", stats.Enabled, "disabled", stats.Disabled,
-			"wrote_back", stats.WroteBack, "conflicts", stats.Conflicts,
+			"updated", stats.Updated, "skipped", stats.Skipped,
+			"malformed", stats.Malformed, "wrote_back", stats.WroteBack,
+			"conflicts", stats.Conflicts,
 			"absent_from_directory", len(drift.AbsentFromDirectory),
 			"should_be_disabled", len(drift.ShouldBeDisabled),
 			"missing_picker_id", len(drift.MissingPickerID),
@@ -109,7 +143,7 @@ func main() {
 
 	if *once {
 		runFull()
-		return
+		return nil
 	}
 
 	// Seed from a full walk so a cold start never relies on a checkpoint that
@@ -126,13 +160,16 @@ func main() {
 		select {
 		case <-ctx.Done():
 			log.Info("shutting down")
-			return
+			return nil
 		case <-fullTicker.C:
 			runFull()
 		case <-incTicker.C:
 			cycle.Lock()
-			stats, err := syncer.Incremental(ctx)
+			cycleCtx, cancel := context.WithTimeout(ctx, *cycleTimeout)
+			stats, err := syncer.Incremental(cycleCtx)
+			cancel()
 			cycle.Unlock()
+
 			m.record(stats, err)
 			if err != nil {
 				// The checkpoint did not move: the next cycle redoes this work.
@@ -142,11 +179,40 @@ func main() {
 			log.Info("incremental cycle",
 				"scanned", stats.Scanned, "created", stats.Created,
 				"enabled", stats.Enabled, "disabled", stats.Disabled,
-				"wrote_back", stats.WroteBack, "conflicts", stats.Conflicts,
+				"updated", stats.Updated, "skipped", stats.Skipped,
+				"malformed", stats.Malformed, "wrote_back", stats.WroteBack,
+				"conflicts", stats.Conflicts,
 				"checkpoint", stats.Checkpoint.Format(time.RFC3339),
 				"duration_ms", stats.Duration.Milliseconds())
 		}
 	}
+}
+
+// preflight asks the directory what it supports instead of assuming. A
+// directory without filter support cannot be synchronized incrementally, and
+// one without PATCH cannot receive the picker_id — both are better discovered
+// at startup than at 03:00.
+func preflight(ctx context.Context, client *scim.Client, log *slog.Logger) error {
+	cfg, err := client.ServiceProviderConfig(ctx)
+	if err != nil {
+		var scimErr *scim.Error
+		if errors.As(err, &scimErr) && scimErr.Credential() {
+			return fmt.Errorf("preflight: the credential was rejected: %w", err)
+		}
+		// Not every deployment exposes the endpoint; that alone is not fatal.
+		log.Warn("preflight: could not read ServiceProviderConfig", "err", err)
+		return nil
+	}
+	if !cfg.Filter.Supported {
+		return errors.New("preflight: the directory reports no filter support, " +
+			"so incremental synchronization is impossible")
+	}
+	if !cfg.Patch.Supported {
+		return errors.New("preflight: the directory reports no PATCH support, " +
+			"so the picker_id cannot be written back")
+	}
+	log.Info("preflight ok", "filter_max_results", cfg.Filter.MaxResults)
+	return nil
 }
 
 func envDuration(key string, def time.Duration) time.Duration {
@@ -161,17 +227,28 @@ func envDuration(key string, def time.Duration) time.Duration {
 	return d
 }
 
-func serveMetrics(ctx context.Context, log *slog.Logger, addr string, m *metrics, st interface {
+// checkpointReader is the slice of the store the metrics endpoint needs.
+type checkpointReader interface {
 	Checkpoint(context.Context) (time.Time, error)
-}) {
+}
+
+func serveMetrics(ctx context.Context, log *slog.Logger, addr string, m *metrics, st checkpointReader) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte("ok\n"))
+	})
+	mux.HandleFunc("/readyz", func(w http.ResponseWriter, _ *http.Request) {
+		if m.cycles.Load() == 0 {
+			http.Error(w, "no cycle completed yet", http.StatusServiceUnavailable)
+			return
+		}
+		_, _ = w.Write([]byte("ready\n"))
 	})
 	mux.HandleFunc("/metrics", func(w http.ResponseWriter, r *http.Request) {
 		cp, _ := st.Checkpoint(r.Context())
 		m.write(w, cp)
 	})
+
 	srv := &http.Server{Addr: addr, Handler: mux, ReadHeaderTimeout: 5 * time.Second}
 	go func() {
 		<-ctx.Done()
