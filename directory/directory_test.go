@@ -364,13 +364,13 @@ func TestFailedCycleIsRetriedFromTheSameCheckpoint(t *testing.T) {
 	}
 }
 
-func TestCancelledContextDoesNotAdvanceTheCheckpoint(t *testing.T) {
+func TestCanceledContextDoesNotAdvanceTheCheckpoint(t *testing.T) {
 	h := newHarness(t, "directory.json", directory.Options{})
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
 	if _, err := h.syncer.Incremental(ctx); err == nil {
-		t.Fatal("a cancelled context must fail the cycle")
+		t.Fatal("a canceled context must fail the cycle")
 	}
 	if cp, _ := h.store.Checkpoint(context.Background()); !cp.IsZero() {
 		t.Errorf("checkpoint moved to %s despite cancellation", cp)

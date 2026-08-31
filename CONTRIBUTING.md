@@ -16,13 +16,13 @@ make ci    # gofmt, vet, tests with -race
   to vendor `scim`, `directory`, `store` and `scimtest` and build them offline,
   with nothing to clear through a dependency review. Anything that needs a
   driver belongs in its own module under `store/`.
-- **Every behavioural rule gets a test that fails without it.** The test suite
+- **Every behavioral rule gets a test that fails without it.** The test suite
   doubles as the acceptance criteria for the integration; a rule with no test is
   a rule nobody can verify.
 - **Say why, not what, in comments.** The code says what it does. Comments are
   for the decision behind it — especially where the obvious implementation is
   wrong, such as `Active` being a pointer.
-- **Name tests after the behaviour they pin**, not the function they call:
+- **Name tests after the behavior they pin**, not the function they call:
   `TestMalformedRecordIsSkippedNotFatal`, not `TestApply3`.
 - **Changes to the contract go in `docs/INTEGRATION.md` in the same PR.** If the
   two disagree, the document is what the partner implemented against.

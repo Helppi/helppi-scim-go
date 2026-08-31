@@ -41,7 +41,7 @@ const (
 	DefaultFutureSkew = 5 * time.Minute
 )
 
-// Stats summarises one cycle.
+// Stats summarizes one cycle.
 type Stats struct {
 	Scanned   int // records read from the directory
 	Created   int // pickers created locally

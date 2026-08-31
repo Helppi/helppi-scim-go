@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"io"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -47,16 +48,26 @@ func (m *metrics) write(w io.Writer, checkpoint time.Time) {
 	if !checkpoint.IsZero() {
 		lag = time.Since(checkpoint).Seconds()
 	}
-	fmt.Fprintf(w, "# HELP directory_sync_lag_seconds Age of the sync checkpoint.\n")
-	fmt.Fprintf(w, "# TYPE directory_sync_lag_seconds gauge\ndirectory_sync_lag_seconds %.0f\n", lag)
-	fmt.Fprintf(w, "# TYPE directory_sync_cycles_total counter\ndirectory_sync_cycles_total %d\n", m.cycles.Load())
-	fmt.Fprintf(w, "# TYPE directory_sync_failures_total counter\ndirectory_sync_failures_total %d\n", m.failures.Load())
-	fmt.Fprintf(w, "# TYPE directory_pickers_created_total counter\ndirectory_pickers_created_total %d\n", m.created.Load())
-	fmt.Fprintf(w, "# TYPE directory_pickers_enabled_total counter\ndirectory_pickers_enabled_total %d\n", m.enabled.Load())
-	fmt.Fprintf(w, "# TYPE directory_pickers_disabled_total counter\ndirectory_pickers_disabled_total %d\n", m.disabled.Load())
-	fmt.Fprintf(w, "# TYPE directory_write_backs_total counter\ndirectory_write_backs_total %d\n", m.wroteBack.Load())
-	fmt.Fprintf(w, "# TYPE directory_write_back_conflicts_total counter\ndirectory_write_back_conflicts_total %d\n", m.conflicts.Load())
-	fmt.Fprintf(w, "# TYPE directory_malformed_records_total counter\ndirectory_malformed_records_total %d\n", m.malformed.Load())
-	fmt.Fprintf(w, "# TYPE directory_alerts_total counter\ndirectory_alerts_total %d\n", m.alerts.Load())
-	fmt.Fprintf(w, "# TYPE directory_last_cycle_duration_ms gauge\ndirectory_last_cycle_duration_ms %d\n", m.lastMs.Load())
+
+	var b strings.Builder
+	gauge := func(name, help string, value string) {
+		fmt.Fprintf(&b, "# HELP %s %s\n# TYPE %s gauge\n%s %s\n", name, help, name, name, value)
+	}
+	counter := func(name, help string, value int64) {
+		fmt.Fprintf(&b, "# HELP %s %s\n# TYPE %s counter\n%s %d\n", name, help, name, name, value)
+	}
+
+	gauge("directory_sync_lag_seconds", "Age of the sync checkpoint. The SLI behind \"a termination reaches the partner within N minutes\".", fmt.Sprintf("%.0f", lag))
+	gauge("directory_last_cycle_duration_ms", "Duration of the most recent cycle.", fmt.Sprintf("%d", m.lastMs.Load()))
+	counter("directory_sync_cycles_total", "Cycles attempted.", m.cycles.Load())
+	counter("directory_sync_failures_total", "Cycles that failed.", m.failures.Load())
+	counter("directory_pickers_created_total", "Pickers created locally.", m.created.Load())
+	counter("directory_pickers_enabled_total", "Pickers re-enabled.", m.enabled.Load())
+	counter("directory_pickers_disabled_total", "Pickers disabled.", m.disabled.Load())
+	counter("directory_write_backs_total", "picker_id values written back to the directory.", m.wroteBack.Load())
+	counter("directory_write_back_conflicts_total", "Write-backs refused with 409.", m.conflicts.Load())
+	counter("directory_malformed_records_total", "Records the directory served that could not be used.", m.malformed.Load())
+	counter("directory_alerts_total", "Conditions no retry can fix.", m.alerts.Load())
+
+	_, _ = io.WriteString(w, b.String())
 }

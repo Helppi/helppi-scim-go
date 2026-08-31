@@ -1,8 +1,10 @@
 # helppi-scim-go
 
+[![CI](https://github.com/Helppi/helppi-scim-go/actions/workflows/ci.yml/badge.svg)](https://github.com/Helppi/helppi-scim-go/actions/workflows/ci.yml)
+
 Cliente de referência, em Go, para o diretório de parceiros da Helppi — a
-integração SCIM 2.0 descrita nas seções 06 a 08 e no Apêndice A da
-*proposta técnica do diretório de parceiros da Helppi*.
+integração SCIM 2.0 descrita nas seções 06 a 08 e no Apêndice A da proposta
+técnica do diretório de parceiros da Helppi.
 
 *English version: [README.md](README.md).*
 

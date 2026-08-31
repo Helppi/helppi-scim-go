@@ -1,8 +1,8 @@
 # The integration contract
 
 What the two sides promise each other, and where each promise is enforced in
-this repository. Section numbers refer to the *Helppi and its partners Technical
-Integration Proposal*.
+this repository. Section numbers refer to the Helppi partner directory technical
+proposal.
 
 ## Who does what
 
@@ -97,7 +97,7 @@ Two consequences worth knowing in advance:
 | `403` | Outside what this credential may do | Fails immediately, no retry | You attempted a write other than `externalId` |
 | `404` | Unknown id, or outside your scope | Typed error | Do not recreate; the person may have left your scope |
 | `409` | `externalId` already bound elsewhere | Alerts once, cycle continues | Human investigation: you likely have a duplicate |
-| `429` | Rate limited | Honours `Retry-After`, retries | Lower `-rps` if it persists |
+| `429` | Rate limited | Honors `Retry-After`, retries | Lower `-rps` if it persists |
 | `5xx` | Directory fault | Retries with backoff | Nothing; the next cycle recovers |
 
 Anything that is not JSON, and any `200` that is not a `ListResponse`, is

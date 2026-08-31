@@ -1,14 +1,16 @@
 # helppi-scim-go
 
+[![CI](https://github.com/Helppi/helppi-scim-go/actions/workflows/ci.yml/badge.svg)](https://github.com/Helppi/helppi-scim-go/actions/workflows/ci.yml)
+
 Reference client, in Go, for the Helppi partner directory — the SCIM 2.0
-integration described in sections 06 to 08 and Appendix A of the
-*Helppi partner directory technical proposal*.
+integration described in sections 06 to 08 and Appendix A of the Helppi
+partner directory technical proposal.
 
 *Versão em português: [README.pt-BR.md](README.pt-BR.md).*
 
 This is not an SDK and it does not have to be adopted as-is. It is code that
 compiles, runs and is tested, written so that two engineering teams can discuss
-behaviour against something concrete instead of against prose — and so that the
+behavior against something concrete instead of against prose — and so that the
 partner starts from a working reconciler rather than from a specification.
 
 - **No dependencies.** Standard library only, Go 1.22+. Vendor the packages and

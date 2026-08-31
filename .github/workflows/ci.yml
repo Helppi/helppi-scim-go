@@ -1,0 +1,155 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  # Pinned so a linter release cannot turn a green branch red on its own.
+  GOLANGCI_LINT_VERSION: v2.12.2
+
+jobs:
+  test:
+    name: Test (Go ${{ matrix.go }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # The floor declared in go.mod, plus the two supported releases. If the
+        # floor breaks, a partner on an older toolchain finds out before we do.
+        go: ['1.22.x', 'oldstable', 'stable']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ matrix.go }}
+
+      - name: gofmt
+        run: |
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then
+            echo "These files are not gofmt'd:"
+            echo "$unformatted"
+            exit 1
+          fi
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: Build
+        run: go build ./...
+
+      - name: Test
+        run: go test ./... -race -count=1
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+
+      - name: Install golangci-lint
+        run: go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@${{ env.GOLANGCI_LINT_VERSION }}
+
+      - name: Lint
+        run: golangci-lint run ./...
+
+  vuln:
+    name: Vulnerabilities
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+
+      # With no third-party dependencies this effectively tracks the Go
+      # toolchain, which is exactly where a vulnerability would reach us.
+      - name: Install govulncheck
+        run: go install golang.org/x/vuln/cmd/govulncheck@latest
+
+      - name: govulncheck
+        run: govulncheck ./...
+
+  importable:
+    name: Importable from outside the module
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+
+      # This repository exists to be imported by a partner. Packages under
+      # internal/ cannot be, and that mistake is invisible to our own tests
+      # because they live inside the module. So a consumer is built from
+      # outside it, exactly as a partner would.
+      - name: Build a consumer against the public API
+        run: |
+          mkdir -p "${RUNNER_TEMP}/consumer"
+          cd "${RUNNER_TEMP}/consumer"
+
+          cat > go.mod <<EOF
+          module example.com/consumer
+
+          go 1.22
+
+          require github.com/Helppi/helppi-scim-go v0.0.0
+
+          replace github.com/Helppi/helppi-scim-go => ${GITHUB_WORKSPACE}
+          EOF
+
+          cat > main.go <<'GO'
+          package main
+
+          import (
+            "context"
+            "fmt"
+
+            "github.com/Helppi/helppi-scim-go/directory"
+            "github.com/Helppi/helppi-scim-go/scim"
+            "github.com/Helppi/helppi-scim-go/scimtest"
+            "github.com/Helppi/helppi-scim-go/store/memory"
+          )
+
+          func main() {
+            enabled := true
+            dir := scimtest.Start([]scim.User{{
+              ID:          "hlp_8fK2Lm91",
+              UserName:    "8fk2lm91@separador.app",
+              DisplayName: "Marcio C.",
+              Active:      &enabled,
+            }})
+            defer dir.Close()
+
+            client, err := scim.New(scim.Options{BaseURL: dir.URL, Token: scimtest.Token})
+            if err != nil {
+              panic(err)
+            }
+
+            st := memory.New(nil)
+            stats, err := directory.New(client, st, directory.Options{}).Incremental(context.Background())
+            if err != nil {
+              panic(err)
+            }
+            if stats.Created != 1 || stats.WroteBack != 1 {
+              panic(fmt.Sprintf("unexpected result: %+v", stats))
+            }
+            fmt.Println("consumer ok:", stats.Created, "created,", stats.WroteBack, "written back")
+          }
+          GO
+
+          go build ./...
+          go run .

@@ -54,7 +54,7 @@ func TestListUsersWalksEveryPage(t *testing.T) {
 	}
 }
 
-func TestListUsersHonoursFilter(t *testing.T) {
+func TestListUsersHonorsFilter(t *testing.T) {
 	dir := scimtest.New(t, fixtures(t, "directory.json"))
 	c := newClient(t, dir.URL)
 
@@ -92,7 +92,7 @@ func TestActiveIsNilWhenAbsent(t *testing.T) {
 	}
 }
 
-func TestRetriesOn429AndHonoursRetryAfter(t *testing.T) {
+func TestRetriesOn429AndHonorsRetryAfter(t *testing.T) {
 	dir := scimtest.New(t, fixtures(t, "directory.json"))
 
 	var slept []time.Duration

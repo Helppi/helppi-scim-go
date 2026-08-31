@@ -1,0 +1,33 @@
+version: "2"
+
+# The core packages carry no third-party dependencies, so the linter set is
+# chosen to catch the mistakes this codebase can actually make: unclosed
+# response bodies, error wrapping that breaks errors.Is/As, and dead code.
+linters:
+  default: standard # errcheck, govet, ineffassign, staticcheck, unused
+  enable:
+    - bodyclose   # an HTTP response body left open leaks a connection
+    - errorlint   # %w and errors.As: the reconciler branches on typed errors
+    - misspell
+    - unconvert
+    - copyloopvar
+
+  settings:
+    errcheck:
+      exclude-functions:
+        # Closing a response body on the way out cannot be acted on.
+        - (io.Closer).Close
+        - (*net/http.Response).Body.Close
+    misspell:
+      locale: US
+
+  exclusions:
+    rules:
+      # Test helpers deliberately ignore errors while arranging fixtures.
+      - path: _test\.go
+        linters:
+          - errcheck
+
+formatters:
+  enable:
+    - gofmt

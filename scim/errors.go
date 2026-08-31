@@ -72,7 +72,7 @@ func decodeError(resp *http.Response) *Error {
 	// {"message":"blocked"} would decode into an empty Error and throw the only
 	// useful text away. Accept the parse only when it actually looks like a
 	// SCIM error; otherwise keep the raw body, which is what an operator needs
-	// in order to recognise a WAF or a load balancer.
+	// in order to recognize a WAF or a load balancer.
 	var parsed Error
 	if json.Unmarshal(body, &parsed) == nil && parsed.looksLikeSCIM() {
 		parsed.HTTPStatus = resp.StatusCode

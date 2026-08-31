@@ -20,7 +20,7 @@ const (
 	ContentType = "application/scim+json"
 )
 
-// Name holds the minimised name published by the directory. The directory
+// Name holds the minimized name published by the directory. The directory
 // deliberately publishes an abbreviated family name (e.g. "C."), so never treat
 // these fields as a legal name.
 type Name struct {
