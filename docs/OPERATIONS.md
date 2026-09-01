@@ -24,7 +24,8 @@ Two replicas on the same schedule both try to create helppers on the first sync.
 The unique index on `directory_id` prevents duplicates, but you get a burst of
 `409`s and a confusing first day. Pick one:
 
-- a Postgres advisory lock around the cycle (`deploy/schema.sql` has the call);
+- a Postgres advisory lock around the cycle (`store/postgres` exposes it as
+  `WithSyncLock`, which returns `ErrLockHeld` when someone else is running);
 - a lease in whatever coordination service you already run;
 - a Kubernetes `CronJob` with `concurrencyPolicy: Forbid`, using `-once`.
 

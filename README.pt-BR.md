@@ -109,6 +109,7 @@ a cada 24 h ─► varredura completa ──► relatório de divergência
 |---|---|
 | `scim` | Protocolo: tipos, cliente HTTP, paginação, retry. Não sabe o que é um helpper. |
 | `store` | O contrato do lado local, com implementação em memória e suíte de contrato. |
+| `store/postgres` | Implementação em PostgreSQL, em módulo próprio para o núcleo seguir sem dependências. |
 | `directory` | O reconciliador. Não sabe o que é HTTP. |
 | `conformance` | Os critérios de aceite, como verificações executáveis. |
 | `scimtest` | Diretório falso com injeção de falhas. |
@@ -155,7 +156,8 @@ a cada 24 h ─► varredura completa ──► relatório de divergência
 
 ## O que trocar antes de produção
 
-- `store/memory` → o `store.Store` de vocês, verificado com `storetest.Run`. O
+- `store/memory` → o `store.Store` de vocês, verificado com `storetest.Run` — ou
+  simplesmente use [`store/postgres`](store/postgres), que já passa nela. O
   índice único em `directory_id` é o que garante idempotência na criação — a
   verificação em Go é caminho rápido, não garantia.
 - `Options.Alert` → o canal de plantão de vocês.

@@ -1,4 +1,4 @@
-.PHONY: ci test vet fmt build run-once dry-run conformance
+.PHONY: ci test vet fmt build run-once dry-run conformance postgres-test
 
 ci: fmt vet test
 
@@ -13,6 +13,12 @@ vet:
 
 build:
 	go build -o bin/directorysyncd ./cmd/directorysyncd
+
+# The PostgreSQL store's tests need a real database and are behind a build tag,
+# so `make test` stays offline.
+#   DATABASE_URL=postgres://... make postgres-test
+postgres-test:
+	cd store/postgres && go test -tags integration -race -count=1 ./...
 
 # Check a live directory against the contract, one line per acceptance
 # criterion. Read-only unless you pass -write-id.

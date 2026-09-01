@@ -162,3 +162,42 @@ jobs:
 
           go build ./...
           go run .
+
+  postgres:
+    name: store/postgres against a real database
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: helppi_scim_go_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          # This module's floor is 1.24, not the core's 1.22: pgx's dependency
+          # chain needs it. That asymmetry is why it is a separate module.
+          go-version: stable
+          cache: false
+
+      - name: Build and vet
+        working-directory: store/postgres
+        run: |
+          go build ./...
+          go vet -tags integration ./...
+
+      - name: Contract suite against PostgreSQL
+        working-directory: store/postgres
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/helppi_scim_go_test?sslmode=disable
+        # The same storetest suite the in-memory store passes, so the
+        # implementation a partner copies is held to identical rules.
+        run: go test -tags integration -race -count=1 ./...

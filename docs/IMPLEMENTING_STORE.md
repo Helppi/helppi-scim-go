@@ -22,7 +22,9 @@ survives a round trip with its time zone intact.
 
 ## The schema
 
-`deploy/schema.sql` is the reference. Two things in it are load-bearing:
+`store/postgres/migrations/0001_init.sql` is the reference — and a working
+implementation of everything below lives beside it in `store/postgres`, if
+Postgres is what you run. Two things in that schema are load-bearing:
 
 ```sql
 constraint helppers_directory_id_key unique (directory_id)
@@ -81,6 +83,13 @@ written into Helppi's directory as `externalId`, and both sides use the pair
 afterwards.
 
 If your primary key is an integer, `id::text` in the query above is enough.
+
+## If you use PostgreSQL, do not write this at all
+
+`store/postgres` already implements the interface, passes the contract suite
+against a real database, ships the migration, and exposes an advisory lock for
+the single-instance guard. It is a separate module, so importing it is also how
+you opt into its dependency on pgx — the core stays dependency-free either way.
 
 ## Do not implement `Ephemeral`
 

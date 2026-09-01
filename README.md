@@ -108,6 +108,7 @@ every 24 h ─► full walk ──► drift report
 |---|---|
 | `scim` | Protocol: types, HTTP client, pagination, retry. Knows nothing about helppers. |
 | `store` | The local-side contract, plus an in-memory implementation and a contract test suite. |
+| `store/postgres` | A PostgreSQL implementation, in its own module so the core stays dependency-free. |
 | `directory` | The reconciler. Knows nothing about HTTP. |
 | `conformance` | The acceptance criteria, as runnable checks. |
 | `scimtest` | Fake directory with fault injection. |
@@ -154,7 +155,8 @@ every 24 h ─► full walk ──► drift report
 
 ## What to replace before production
 
-- `store/memory` → your own `store.Store`, verified with `storetest.Run`. The
+- `store/memory` → your own `store.Store`, verified with `storetest.Run` — or
+  just use [`store/postgres`](store/postgres), which already passes it. The
   unique index on `directory_id` is what guarantees idempotent creation — the
   check in Go is a fast path, not a guarantee.
 - `Options.Alert` → your on-call channel.

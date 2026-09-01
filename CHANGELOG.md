@@ -12,6 +12,13 @@ the migration in the same bullet.
 
 ### Added
 
+- `store/postgres`: a PostgreSQL `store.Store` in its own Go module, so the
+  core packages stay dependency-free and only people who want it download pgx.
+  Ships the migration, passes the `storetest` contract suite against a real
+  database, and exposes `WithSyncLock` — a session-level advisory lock that
+  returns `ErrLockHeld` — for the single-instance guard the operations guide
+  asks for. Its integration tests are behind a build tag, so the default
+  `go test ./...` stays offline.
 - `conformance` and `cmd/conformance`: the acceptance criteria for phases 1 and
   2 as runnable checks against a live directory, one line per criterion, with a
   non-zero exit when one fails and `-json` for pasting into a ticket. The same
@@ -34,6 +41,8 @@ the migration in the same bullet.
 
 ### Changed
 
+- `deploy/schema.sql` is gone; `store/postgres/migrations/0001_init.sql` is the
+  single source of truth for the schema. Two copies would have drifted.
 - **`store.Helpper.ID` is now a `string`** (was `int64`), and `Helpper.HelpperID()`
   is gone — use `Helpper.ID`. A partner whose helpper identifier is a UUID could
   not implement the old interface honestly.
