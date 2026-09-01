@@ -18,12 +18,12 @@ partner starts from a working reconciler rather than from a specification.
 - **Tested against a fake directory** that implements the same contract,
   including the failures that matter: `403`, `409`, `429`, `5xx`, malformed
   records, broken pagination, and responses that are not SCIM at all.
-- **`testdata/directory.json` is the conformance set**: the five lifecycle
-  states from the proposal plus the `externalId` write-back cases. Both sides can
-  test against the same bytes.
+- **A conformance runner.** One command checks a live directory against every
+  acceptance criterion for phases 1 and 2, and exits non-zero if one fails, so
+  "phase 1 is done" is an output rather than an opinion.
 
 ```bash
-go test ./... -race        # 39 tests, no network
+go test ./... -race        # 45 tests, no network
 make ci                    # gofmt + vet + tests
 ```
 
@@ -41,6 +41,27 @@ store, and that guard is deliberate: an empty store makes every record look new,
 so it would create fresh helppers and `PATCH` their invented ids over the real
 `externalId` values. That corrupts data on Helppi's side. Plug in a real
 `store.Store` first.
+
+## Is the directory behaving?
+
+```bash
+DIRECTORY_TOKEN=… go run ./cmd/conformance \
+    -base-url https://…/scim/v2 -alias-domain separador.app
+```
+
+```
+PHASE 1 — Directory synchronization
+  PASS  P1.01   Credential is accepted                          §13 configuration
+  PASS  P1.04   active is present on every record               §06 lifecycle
+  PASS  P1.07   startIndex and count are honored                Appendix A — pagination
+  PASS  P1.08   Filtering by meta.lastModified works            §08 incremental sync
+  ...
+14 passed, 0 failed, 0 skipped
+```
+
+Read-only unless you name a record to write to. See
+[docs/CONFORMANCE.md](docs/CONFORMANCE.md); the same cases run as Go subtests
+via `conformance.Run(t, client, opts)` so they can gate your CI.
 
 ## Quickstart
 
@@ -88,8 +109,10 @@ every 24 h ─► full walk ──► drift report
 | `scim` | Protocol: types, HTTP client, pagination, retry. Knows nothing about helppers. |
 | `store` | The local-side contract, plus an in-memory implementation and a contract test suite. |
 | `directory` | The reconciler. Knows nothing about HTTP. |
+| `conformance` | The acceptance criteria, as runnable checks. |
 | `scimtest` | Fake directory with fault injection. |
 | `cmd/directorysyncd` | The worker: two tickers, structured logs, `/metrics`, `/healthz`, `/readyz`. |
+| `cmd/conformance` | Checks a live directory and prints one line per criterion. |
 
 ## Documentation
 
@@ -97,6 +120,7 @@ every 24 h ─► full walk ──► drift report
 |---|---|
 | [docs/INTEGRATION.md](docs/INTEGRATION.md) | The contract: identity model, lifecycle, error matrix, and which test defends each promise. |
 | [docs/IMPLEMENTING_STORE.md](docs/IMPLEMENTING_STORE.md) | How to write the one interface you own, and the two load-bearing lines of the schema. |
+| [docs/CONFORMANCE.md](docs/CONFORMANCE.md) | What each acceptance case checks, and why the write cases are opt-in. |
 | [docs/OPERATIONS.md](docs/OPERATIONS.md) | Metrics, alert thresholds and a runbook per failure. |
 
 ## Nine decisions worth arguing about

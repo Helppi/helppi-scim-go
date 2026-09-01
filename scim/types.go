@@ -6,6 +6,7 @@ package scim
 
 import (
 	"encoding/json"
+	"fmt"
 	"time"
 )
 
@@ -97,6 +98,21 @@ type ListResponse struct {
 	StartIndex   int               `json:"startIndex"`
 	ItemsPerPage int               `json:"itemsPerPage"`
 	Resources    []json.RawMessage `json:"Resources"` // capital R, per RFC 7644
+}
+
+// Users decodes the page's records. Resources is kept raw so one malformed
+// record cannot destroy the whole page, and so unknown attributes survive
+// decoding untouched; this is the convenience path when you want them all.
+func (lr *ListResponse) Users() ([]User, error) {
+	out := make([]User, 0, len(lr.Resources))
+	for i, raw := range lr.Resources {
+		var u User
+		if err := json.Unmarshal(raw, &u); err != nil {
+			return nil, fmt.Errorf("decode record %d: %w", i, err)
+		}
+		out = append(out, u)
+	}
+	return out, nil
 }
 
 // PatchOp is the request body of a PATCH. Only externalId may be written by

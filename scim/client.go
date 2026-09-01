@@ -98,6 +98,40 @@ func New(opts Options) (*Client, error) {
 	return c, nil
 }
 
+// Page fetches exactly one page of the directory. ListUsers is built on it;
+// reach for Page directly when you need to control startIndex, count or the
+// filter yourself — conformance probing, for example.
+//
+// startIndex is 1-based, per RFC 7644.
+func (c *Client) Page(ctx context.Context, filter string, startIndex, count int) (*ListResponse, error) {
+	if startIndex < 1 {
+		startIndex = 1
+	}
+	if count <= 0 {
+		count = DefaultPageSize
+	}
+
+	q := url.Values{}
+	q.Set("startIndex", strconv.Itoa(startIndex))
+	q.Set("count", strconv.Itoa(count))
+	if filter != "" {
+		q.Set("filter", filter)
+	}
+
+	var lr ListResponse
+	if err := c.do(ctx, http.MethodGet, "Users?"+q.Encode(), nil, &lr); err != nil {
+		return nil, fmt.Errorf("list users at startIndex=%d: %w", startIndex, err)
+	}
+	// A response that is not a SCIM ListResponse must not be read as an empty
+	// directory: that turns a proxy error page into "nobody works here any
+	// more".
+	if !slices.Contains(lr.Schemas, SchemaList) {
+		return nil, fmt.Errorf("scim: response at startIndex=%d is not a %s (schemas=%v)",
+			startIndex, SchemaList, lr.Schemas)
+	}
+	return &lr, nil
+}
+
 // ListUsers walks every page matching filter and calls fn once per record, in
 // the order the directory returned them.
 //
@@ -118,23 +152,9 @@ func (c *Client) ListUsers(ctx context.Context, filter string, pageSize int, fn 
 	)
 
 	for {
-		q := url.Values{}
-		q.Set("startIndex", strconv.Itoa(startIndex))
-		q.Set("count", strconv.Itoa(pageSize))
-		if filter != "" {
-			q.Set("filter", filter)
-		}
-
-		var lr ListResponse
-		if err := c.do(ctx, http.MethodGet, "Users?"+q.Encode(), nil, &lr); err != nil {
-			return fmt.Errorf("list users at startIndex=%d: %w", startIndex, err)
-		}
-		// A response that is not a SCIM ListResponse must not be read as an
-		// empty directory: that turns a proxy error page into "nobody works
-		// here any more".
-		if !slices.Contains(lr.Schemas, SchemaList) {
-			return fmt.Errorf("scim: response at startIndex=%d is not a %s (schemas=%v)",
-				startIndex, SchemaList, lr.Schemas)
+		lr, err := c.Page(ctx, filter, startIndex, pageSize)
+		if err != nil {
+			return err
 		}
 		if len(lr.Resources) == 0 {
 			return nil
@@ -200,7 +220,15 @@ func (c *Client) PatchExternalID(ctx context.Context, id, externalID string) (*U
 	if externalID == "" {
 		return nil, errors.New("scim: refusing to write an empty externalId")
 	}
-	body, err := json.Marshal(NewExternalIDPatch(externalID))
+	return c.Patch(ctx, id, NewExternalIDPatch(externalID))
+}
+
+// Patch sends an arbitrary PatchOp. The contract permits writing only
+// externalId, so PatchExternalID is what production code should call; this
+// primitive exists so a conformance suite can prove the directory refuses
+// everything else.
+func (c *Client) Patch(ctx context.Context, id string, op PatchOp) (*User, error) {
+	body, err := json.Marshal(op)
 	if err != nil {
 		return nil, err
 	}

@@ -12,6 +12,16 @@ the migration in the same bullet.
 
 ### Added
 
+- `conformance` and `cmd/conformance`: the acceptance criteria for phases 1 and
+  2 as runnable checks against a live directory, one line per criterion, with a
+  non-zero exit when one fails and `-json` for pasting into a ticket. The same
+  cases run as Go subtests via `conformance.Run`, so a partner can gate their
+  CI on them. The write cases are opt-in and built to leave the directory as
+  they found it.
+- `scim.Client.Page`, `scim.Client.Patch` and `ListResponse.Users`: the
+  primitives the conformance suite needs to probe a single page, a deliberately
+  forbidden attribute, and a decoded page. `ListUsers` and `PatchExternalID`
+  are now thin policy wrappers over them.
 - `store/storetest`: a contract test suite any `store.Store` implementation can
   run to prove it satisfies the rules the interface cannot express.
 - `-dry-run`: reports what a cycle would do and writes nothing — not to the

@@ -18,12 +18,13 @@ reconciliador funcionando, não de uma especificação.
 - **Testado contra um diretório falso** que implementa o mesmo contrato,
   incluindo as falhas que importam: `403`, `409`, `429`, `5xx`, registros
   inválidos, paginação quebrada e respostas que nem SCIM são.
-- **`testdata/directory.json` é o conjunto de conformidade**: os cinco estados
-  de ciclo de vida da proposta, mais os casos de devolução do `externalId`. Os
-  dois lados podem testar contra os mesmos bytes.
+- **Um verificador de conformidade.** Um comando confere um diretório real
+  contra todos os critérios de aceite das fases 1 e 2, e sai com código
+  diferente de zero se algum falhar — então "a fase 1 acabou" vira saída de
+  comando, não opinião.
 
 ```bash
-go test ./... -race        # 39 testes, sem rede
+go test ./... -race        # 45 testes, sem rede
 make ci                    # gofmt + vet + testes
 ```
 
@@ -41,6 +42,27 @@ memória, e essa trava é deliberada: um store vazio faz todo registro parecer
 novo, então ele criaria helppers do zero e gravaria esses ids inventados por cima
 dos `externalId` reais. Isso corrompe dados do lado da Helppi. Ligue um
 `store.Store` de verdade antes.
+
+## O diretório está se comportando?
+
+```bash
+DIRECTORY_TOKEN=… go run ./cmd/conformance \
+    -base-url https://…/scim/v2 -alias-domain separador.app
+```
+
+```
+PHASE 1 — Directory synchronization
+  PASS  P1.01   Credential is accepted                          §13 configuration
+  PASS  P1.04   active is present on every record               §06 lifecycle
+  PASS  P1.07   startIndex and count are honored                Appendix A — pagination
+  ...
+14 passed, 0 failed, 0 skipped
+```
+
+Somente leitura, a menos que você indique um registro para escrita. Veja
+[docs/CONFORMANCE.md](docs/CONFORMANCE.md); os mesmos casos rodam como subtestes
+Go via `conformance.Run(t, client, opts)`, então dá para usá-los como portão no
+CI de vocês.
 
 ## Início rápido
 
@@ -88,8 +110,10 @@ a cada 24 h ─► varredura completa ──► relatório de divergência
 | `scim` | Protocolo: tipos, cliente HTTP, paginação, retry. Não sabe o que é um helpper. |
 | `store` | O contrato do lado local, com implementação em memória e suíte de contrato. |
 | `directory` | O reconciliador. Não sabe o que é HTTP. |
+| `conformance` | Os critérios de aceite, como verificações executáveis. |
 | `scimtest` | Diretório falso com injeção de falhas. |
 | `cmd/directorysyncd` | O worker: dois tickers, logs estruturados, `/metrics`, `/healthz`, `/readyz`. |
+| `cmd/conformance` | Confere um diretório real e imprime uma linha por critério. |
 
 ## Documentação
 
@@ -97,6 +121,7 @@ a cada 24 h ─► varredura completa ──► relatório de divergência
 |---|---|
 | [docs/INTEGRATION.md](docs/INTEGRATION.md) | O contrato: modelo de identidade, ciclo de vida, matriz de erros e qual teste defende cada promessa. |
 | [docs/IMPLEMENTING_STORE.md](docs/IMPLEMENTING_STORE.md) | Como escrever a única interface que é de vocês, e as duas linhas do schema que sustentam tudo. |
+| [docs/CONFORMANCE.md](docs/CONFORMANCE.md) | O que cada caso de aceite confere, e por que os casos de escrita são opcionais. |
 | [docs/OPERATIONS.md](docs/OPERATIONS.md) | Métricas, limiares de alerta e runbook por tipo de falha. |
 
 ## Nove decisões que valem discussão

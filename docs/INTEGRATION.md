@@ -136,5 +136,11 @@ rejected rather than interpreted. A proxy error page must never be read as
 `scimtest` is good enough to develop against, and deliberately not a simulator.
 It understands only `meta.lastModified gt "<RFC3339>"` — no `and`, no `ge`, no
 attribute filters — and implements `startIndex`/`count` pagination only, with no
-cursor support. Passing against it is necessary, not sufficient: run the same scenarios against
-the Helppi sandbox before calling Phase 1 done.
+cursor support. Passing against it is necessary, not sufficient. Run the conformance suite
+against the Helppi sandbox before calling phase 1 done:
+
+```bash
+DIRECTORY_TOKEN=… go run ./cmd/conformance -base-url https://…/scim/v2
+```
+
+See [CONFORMANCE.md](CONFORMANCE.md).

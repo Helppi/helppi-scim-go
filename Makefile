@@ -1,4 +1,4 @@
-.PHONY: ci test vet fmt build run-once dry-run
+.PHONY: ci test vet fmt build run-once dry-run conformance
 
 ci: fmt vet test
 
@@ -13,6 +13,12 @@ vet:
 
 build:
 	go build -o bin/directorysyncd ./cmd/directorysyncd
+
+# Check a live directory against the contract, one line per acceptance
+# criterion. Read-only unless you pass -write-id.
+#   DIRECTORY_BASE_URL=... DIRECTORY_TOKEN=... make conformance
+conformance:
+	go run ./cmd/conformance -base-url "$$DIRECTORY_BASE_URL"
 
 # Report what one cycle WOULD do, writing nothing anywhere. Always start here:
 #   DIRECTORY_BASE_URL=... DIRECTORY_TOKEN=... make dry-run
