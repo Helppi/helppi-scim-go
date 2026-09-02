@@ -8,7 +8,11 @@ While the version is `0.x`, the public API may still change between minor
 versions. Anything that would break a caller is listed under **Changed** with
 the migration in the same bullet.
 
-## [Unreleased]
+## [0.1.0] — 2026-09-02
+
+Primeira versão publicada. O contrato descrito em `docs/INTEGRATION.md` passa a
+ser estável: mudanças que quebrem quem já integrou entram como `0.2.0`, com a
+migração descrita aqui.
 
 ### Added
 
@@ -81,3 +85,5 @@ the migration in the same bullet.
 - A directory timestamp implausibly far in the future no longer advances the
   checkpoint past records that were never read.
 - The default `User-Agent` names this library rather than a partner.
+
+[0.1.0]: https://github.com/Helppi/helppi-scim-go/releases/tag/v0.1.0
