@@ -76,8 +76,10 @@ offline and instant.
 chain needs 1.24. That asymmetry is precisely why this is a separate module:
 the floor only rises for people who opt in.
 
-**Not consumable until the parent is tagged.** `go.mod` carries a `replace`
-pointing at the working tree, because `github.com/Helppi/helppi-scim-go` has no
-released version yet. The directive is ignored by anyone importing this module,
-so it does not leak into your build — but it does mean this module resolves
-only inside this repository until `v0.1.0` exists upstream.
+**Versioned separately from the core.** This module is tagged
+`store/postgres/vX.Y.Z`, independently of the parent's `vX.Y.Z`, which is how Go
+releases a module living in a subdirectory:
+
+```bash
+go get github.com/Helppi/helppi-scim-go/store/postgres@latest
+```

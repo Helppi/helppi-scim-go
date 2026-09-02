@@ -2,14 +2,8 @@ module github.com/Helppi/helppi-scim-go/store/postgres
 
 go 1.24.0
 
-// Until the parent module is tagged, resolve it from the working tree. This
-// directive is ignored by anyone who imports this module, so it does not leak
-// into a consumer's build — but it does mean this submodule is not consumable
-// until v0.1.0 exists upstream.
-replace github.com/Helppi/helppi-scim-go => ../..
-
 require (
-	github.com/Helppi/helppi-scim-go v0.0.0-00010101000000-000000000000
+	github.com/Helppi/helppi-scim-go v0.1.0
 	github.com/jackc/pgx/v5 v5.7.2
 )
 
