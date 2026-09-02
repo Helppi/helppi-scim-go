@@ -13,7 +13,7 @@ import (
 // metrics is a deliberately tiny Prometheus exposition, so the reference client
 // has no third-party dependencies at all. Replace it with your own registry.
 //
-// sync_lag_seconds is the one that matters: it is the SLI behind "a termination
+// sync_lag_seconds is the one that matters: it is the SLI behind "an account closure
 // reaches the partner within N minutes", and it alerts on a stuck worker even
 // when nothing is erroring.
 type metrics struct {
@@ -57,7 +57,7 @@ func (m *metrics) write(w io.Writer, checkpoint time.Time) {
 		fmt.Fprintf(&b, "# HELP %s %s\n# TYPE %s counter\n%s %d\n", name, help, name, name, value)
 	}
 
-	gauge("directory_sync_lag_seconds", "Age of the sync checkpoint. The SLI behind \"a termination reaches the partner within N minutes\".", fmt.Sprintf("%.0f", lag))
+	gauge("directory_sync_lag_seconds", "Age of the sync checkpoint. The SLI behind \"an account closure reaches the partner within N minutes\".", fmt.Sprintf("%.0f", lag))
 	gauge("directory_last_cycle_duration_ms", "Duration of the most recent cycle.", fmt.Sprintf("%d", m.lastMs.Load()))
 	counter("directory_sync_cycles_total", "Cycles attempted.", m.cycles.Load())
 	counter("directory_sync_failures_total", "Cycles that failed.", m.failures.Load())

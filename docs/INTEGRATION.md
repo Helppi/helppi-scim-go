@@ -59,7 +59,7 @@ Three rules follow, and this client enforces all three:
    disabled account is worse than not having it: it looks like access.
 2. **Reactivation reuses the same helpper.** The directory `id` is the key, so a
    person who leaves and returns is the same account, not a second one.
-3. **Absence never deprovisions.** A termination always arrives explicitly as
+3. **Absence never deprovisions.** A closure always arrives explicitly as
    `active: false` while the record is still visible. A record that vanishes is
    a record whose retention window ended — the disable arrived long before. If
    an enabled helpper is missing from a full walk, that is *drift* to report, not

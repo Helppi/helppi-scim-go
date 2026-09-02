@@ -156,7 +156,7 @@ func updateApplies(t *testing.T, newStore Factory) {
 		t.Fatalf("read back: %v", err)
 	}
 	if got.Enabled {
-		t.Error("Enabled was not applied — this is the field that blocks a terminated worker")
+		t.Error("Enabled was not applied — this is the field that blocks a closed account")
 	}
 	if got.DisplayName != "Renamed R." || got.Login != "new@separador.app" {
 		t.Errorf("read back %+v, want display name and login updated", got)

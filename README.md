@@ -148,7 +148,7 @@ every 24 h ─► full walk ──► drift report
    means the local mapping is wrong; retrying cannot fix it, and re-alerting
    every five minutes trains people to ignore the alert.
 8. **Absence from the directory never deprovisions.** The daily walk *reports*
-   the drift and stops there: a termination always arrives explicitly, as
+   the drift and stops there: a closure always arrives explicitly, as
    `active: false`, before the record disappears.
 9. **A response that is not SCIM is an error, not an empty directory.** An HTML
    block page decoded loosely becomes "nobody works here any more".
@@ -162,7 +162,7 @@ every 24 h ─► full walk ──► drift report
 - `Options.Alert` → your on-call channel.
 - `cmd/directorysyncd/metrics.go` → your metrics registry.
   `directory_sync_lag_seconds` is the one that matters: it is the SLI behind
-  "a termination reaches the partner within N minutes", and it catches a stuck
+  "an account closure reaches the partner within N minutes", and it catches a stuck
   worker even when nothing is erroring.
 - **Run exactly one instance.** Two replicas on the same schedule will both try
   to create helppers on the first sync. The unique index prevents duplicates, but

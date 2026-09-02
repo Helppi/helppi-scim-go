@@ -45,7 +45,7 @@ and `/readyz` (at least one cycle has completed).
 | `directory_malformed_records_total` | Records the directory served that we could not use |
 | `directory_alerts_total` | Conditions no retry can fix |
 
-`directory_sync_lag_seconds` is the SLI behind "a termination reaches the
+`directory_sync_lag_seconds` is the SLI behind "an account closure reaches the
 partner within N minutes". Alert on it above roughly three cycle intervals. It
 is the only metric that catches a worker that is stuck rather than failing —
 a hung cycle produces no errors at all.
@@ -86,7 +86,7 @@ redoes exactly that work. That is the whole point of a reconciler.
 
 | Flag | Default | Notes |
 |---|---|---|
-| `-incremental` | `5m` | How quickly a termination propagates |
+| `-incremental` | `5m` | How quickly an account closure propagates |
 | `-full` | `24h` | The drift-detection walk |
 | `-page-size` | `200` | Balance between round trips and retry cost |
 | `-rps` | `5` | Client-side throttle |

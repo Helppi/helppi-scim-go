@@ -51,7 +51,7 @@ func TestDirectoryConformance(t *testing.T) {
 | P1.01 | The credential is accepted | Everything else is meaningless without it, so a failure here skips the rest with a reason instead of reporting fourteen failures for one problem |
 | P1.02 | Responses are SCIM `ListResponse`s, `startIndex` is 1-based | A proxy page decoded loosely reads as an empty directory |
 | P1.03 | Every record has a stable, unique `id` | It is the only key the two sides match on |
-| P1.04 | `active` is present on **every** record | The one attribute a client must never guess: read as "disabled" it blocks the fleet, read as "enabled" it leaves terminated people working |
+| P1.04 | `active` is present on **every** record | The one attribute a client must never guess: read as "disabled" it blocks the fleet, read as "enabled" it leaves closed accounts able to work |
 | P1.05 | Identities are aliases on the agreed domain | The data-minimization promise, checked rather than trusted |
 | P1.06 | `meta.lastModified` is present and not in the future | It is the watermark; a fast clock upstream would skip everything in between |
 | P1.07 | `startIndex` and `count` are honored | A directory that ignores `startIndex` makes a walking client loop forever |

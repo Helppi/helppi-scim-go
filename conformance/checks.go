@@ -164,7 +164,7 @@ func (r *runner) checkActiveFlag() {
 
 	// The single most consequential attribute in the contract. A client that
 	// reads a missing flag as "disabled" blocks the whole fleet; one that reads
-	// it as "enabled" leaves terminated people working. Neither is acceptable,
+	// it as "enabled" leaves closed accounts able to work. Neither is acceptable,
 	// so the directory must always send it.
 	for _, u := range r.users {
 		if u.Active == nil {

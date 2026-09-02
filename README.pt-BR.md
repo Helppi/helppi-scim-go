@@ -149,7 +149,7 @@ a cada 24 h ─► varredura completa ──► relatório de divergência
    Significa que o mapeamento local está errado; repetir não corrige, e alertar
    a cada cinco minutos ensina as pessoas a ignorar o alerta.
 8. **Ausência no diretório nunca desprovisiona.** A varredura diária *reporta* a
-   divergência e para por aí: o desligamento chega sempre explícito, como
+   divergência e para por aí: o encerramento chega sempre explícito, como
    `active: false`, antes de o registro sumir.
 9. **Resposta que não é SCIM é erro, não diretório vazio.** Uma página HTML de
    bloqueio, decodificada com folga, vira "não trabalha mais ninguém aqui".
@@ -163,7 +163,7 @@ a cada 24 h ─► varredura completa ──► relatório de divergência
 - `Options.Alert` → o canal de plantão de vocês.
 - `cmd/directorysyncd/metrics.go` → o registrador de métricas de vocês.
   `directory_sync_lag_seconds` é a métrica que importa: é o SLI por trás de "um
-  desligamento chega ao parceiro em até N minutos", e pega um worker travado
+  encerramento de cadastro chega ao parceiro em até N minutos", e pega um worker travado
   mesmo quando nada está dando erro.
 - **Rode uma instância só.** Duas réplicas no mesmo cronograma tentam criar os
   mesmos helppers na primeira sincronização. O índice único evita duplicidade,

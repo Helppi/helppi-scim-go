@@ -41,6 +41,10 @@ the migration in the same bullet.
 
 ### Changed
 
+- Wording: an account that stops being able to operate is a **closure**, not a
+  "termination". The previous phrasing implied an employment relationship that
+  this integration does not describe, and this repository is public. The
+  machine sense is untouched — a page still terminates a walk.
 - `deploy/schema.sql` is gone; `store/postgres/migrations/0001_init.sql` is the
   single source of truth for the schema. Two copies would have drifted.
 - **`store.Helpper.ID` is now a `string`** (was `int64`), and `Helpper.HelpperID()`

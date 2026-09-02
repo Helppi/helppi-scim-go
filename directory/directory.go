@@ -226,7 +226,7 @@ func (s *Syncer) Full(ctx context.Context) (Stats, Drift, error) {
 	for _, p := range local {
 		if !seen[p.DirectoryID] {
 			// Do NOT disable here. Absence is not a deprovisioning signal: the
-			// directory keeps terminated people visible as inactive for the
+			// directory keeps closed accounts visible as inactive for the
 			// agreed retention window, so a disable would already have arrived.
 			drift.AbsentFromDirectory = append(drift.AbsentFromDirectory, p.DirectoryID)
 		}
@@ -332,7 +332,7 @@ type record struct {
 
 // apply converges one directory record into the local base. Every state
 // transition in the integration contract — created, suspended, reactivated,
-// renamed, terminated — collapses into this one upsert, which is what makes
+// renamed, closed — collapses into this one upsert, which is what makes
 // replays free.
 func (s *Syncer) apply(ctx context.Context, u scim.User, stats *Stats) (record, error) {
 	stats.Scanned++
