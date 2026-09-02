@@ -2,70 +2,160 @@
 
 [![CI](https://github.com/Helppi/helppi-scim-go/actions/workflows/ci.yml/badge.svg)](https://github.com/Helppi/helppi-scim-go/actions/workflows/ci.yml)
 
-Reference client, in Go, for the Helppi partner directory — the SCIM 2.0
-integration described in sections 06 to 08 and Appendix A of the Helppi
-partner directory technical proposal.
+**A working client for the Helppi partner directory** — the code that keeps your
+records of Helppi professionals in step with ours, automatically.
 
 *Versão em português: [README.pt-BR.md](README.pt-BR.md).*
 
-This is not an SDK and it does not have to be adopted as-is. It is code that
-compiles, runs and is tested, written so that two engineering teams can discuss
-behavior against something concrete instead of against prose — and so that the
-partner starts from a working reconciler rather than from a specification.
+> **How to read this.** Part 1 is written for product and operations: what this
+> is, what changes when it runs, and what your team has to do. Part 2 is the
+> engineering reference. You do not need Part 2 to decide whether this is worth
+> doing.
 
-- **No dependencies.** Standard library only, Go 1.22+. Vendor the packages and
-  build them offline if that is easier.
-- **Tested against a fake directory** that implements the same contract,
-  including the failures that matter: `403`, `409`, `429`, `5xx`, malformed
-  records, broken pagination, and responses that are not SCIM at all.
-- **A conformance runner.** One command checks a live directory against every
-  acceptance criterion for phases 1 and 2, and exits non-zero if one fails, so
-  "phase 1 is done" is an output rather than an opinion.
+---
+
+# Part 1 · What this is
+
+## In one paragraph
+
+Helppi publishes a directory of the professionals authorized to work with you.
+This repository is a **reference client for that directory**: a small program
+that asks Helppi "who exists, and who is allowed to work right now?", applies
+the answer to your own accounts, and hands back the identifier you generated so
+both sides share a permanent key. It is written in Go, it has no dependencies,
+and it comes with a test suite that proves your integration works before it ever
+touches production.
+
+It accompanies the *Helppi partner directory technical proposal*. The proposal
+describes the agreement; this repository is the agreement, executable.
+
+## The problem it solves
+
+Today a professional's record reaches you once, when they join, and then the two
+sides drift apart. When someone is suspended or has their registration closed at
+Helppi, nothing tells you. Their account on your side stays open until a person
+notices and asks someone to fix it — by message, by spreadsheet, always after
+the fact.
+
+That gap is a security problem before it is an operational one: access that
+outlives the reason for it.
+
+## What changes when this is running
+
+| Today | With the directory |
+|---|---|
+| The record arrives once, on the way in | The state is consulted every few minutes |
+| A suspension never reaches you | The account is blocked within the agreed interval |
+| No shared key between the two sides | A stable pair of identifiers, set once |
+| Someone notices, then asks for a fix | Nobody intervenes; it converges on its own |
+| "Which account is this person?" is manual work | The answer is a lookup |
+
+## How it works, in plain language
+
+Every few minutes the client asks Helppi a single question: *what changed since
+the last time I asked?* Helppi answers with the professionals whose state moved
+— someone joined, someone was suspended, someone came back, someone's
+registration was closed. The client applies each answer to your accounts:
+creates, blocks, unblocks.
+
+The first time it sees a professional, it creates the account on your side and
+then **writes your identifier back into Helppi's record**. That single step is
+what creates the shared key. From then on, both companies point at the same
+person with the same pair of identifiers, and nobody ever has to match by name
+or e-mail again — which matters, because names and e-mails change and are
+exactly the data neither company should be moving around.
+
+Once a day it does a full pass, comparing everything against everything, and
+reports any disagreement. It reports; it does not act. A professional missing
+from the directory is never treated as an instruction to delete anything.
+
+Three properties are worth knowing, because they are what make this safe to run
+unattended:
+
+- **It cannot lose an update.** If a cycle fails halfway, it does not record
+  progress, so the next cycle simply does the same work again.
+- **Repeating is free.** Applying the same answer twice changes nothing, so
+  retrying is always safe.
+- **It never guesses.** A record that arrives incomplete is skipped and reported
+  rather than interpreted — because interpreting "I don't know" as "blocked"
+  would take everybody's access away at once.
+
+## What your team has to do
+
+Three things. Everything else is in this repository.
+
+**1 · Connect it to your database.** You implement one interface — six methods:
+find, create, update, list, and read/write a timestamp. That is the only code
+this integration genuinely requires you to write. If you run PostgreSQL, even
+this is already done: [`store/postgres`](store/postgres) is a working
+implementation you can use as-is.
+
+**2 · Run one process.** A worker is included, with metrics and health checks.
+It runs continuously, or once per scheduled run — whichever fits how you deploy.
+
+**3 · Return your identifier.** When you create an account, write its id back to
+Helppi's record. One call, once per professional.
+
+Then run the conformance command against Helppi's test environment. It prints a
+pass/fail line per requirement, and that report **is** the acceptance criterion
+for Phase 1 — not an opinion, not a meeting.
+
+## What you get without writing it
+
+| | |
+|---|---|
+| **A fake Helppi directory** | Develop and test offline, with no sandbox and no credentials. It also simulates the failures — rate limits, conflicts, malformed records — so you can see how your side behaves before it matters. |
+| **A conformance command** | 14 checks across both phases, each naming the requirement it defends. Exits non-zero on failure, so it works as a gate in your pipeline. |
+| **A contract test suite** | Point it at your database implementation and it verifies the rules the method signatures cannot express — including that eight simultaneous workers create exactly one account, not eight. |
+| **A ready worker** | Metrics, health checks, structured logs, a dry-run mode that writes nothing, and a guard that refuses to run in a configuration that could corrupt data. |
+| **A PostgreSQL store** | In its own module, so nobody who doesn't want it pays for the dependency. |
+
+## What this does not do
+
+- **It does not log anyone in.** Single sign-on is a separate concern, described
+  in the proposal. This client is only about who exists and who is allowed.
+- **It does not receive personal data beyond the minimum.** No real e-mail, no
+  full legal name, no phone or document number. What crosses is an opaque
+  identifier, an alias, an abbreviated name, and a status.
+- **It does not delete anything on its own.** Absence from the directory is
+  reported as a discrepancy, never acted on.
+- **It does not write to Helppi**, except for that one identifier.
+
+## Questions that usually come up
+
+**Do we have to use Go?**
+No. If your stack is something else, this repository is still useful as the
+executable specification: the behaviour is documented, the failure cases are
+named, and the fixtures in `testdata/` are the same bytes both sides can test
+against. The conformance command runs against any implementation, in any
+language, because it only speaks HTTP.
+
+**What if a sync fails?**
+Nothing breaks. The client did not record progress, so the next cycle repeats
+the work. A cycle that fails is a delayed cycle, not a lost one.
+
+**How fast does a block take effect?**
+Whatever interval the two companies agree on. The proposal suggests five
+minutes; the number is a setting, not a rewrite.
+
+**What if we already have accounts for these people?**
+The first full pass finds them by directory identifier and adopts them. It does
+not create duplicates — and there is a test that proves it.
+
+**How do we know we are done?**
+Run `conformance` against Helppi's test environment. Fourteen checks, each
+mapped to a section of the proposal. When they all pass, Phase 1 is complete.
+
+---
+
+# Part 2 · Engineering reference
+
+## Quickstart
 
 ```bash
 go test ./... -race        # 45 tests, no network
 make ci                    # gofmt + vet + tests
 ```
-
-## Start with a dry run
-
-```bash
-DIRECTORY_BASE_URL=… DIRECTORY_TOKEN=… make dry-run
-```
-
-A dry run reports what a cycle would do and writes nothing — not to your store,
-not to the directory, not even to the checkpoint.
-
-The worker **refuses** to run for real against a directory with the in-memory
-store, and that guard is deliberate: an empty store makes every record look new,
-so it would create fresh helppers and `PATCH` their invented ids over the real
-`externalId` values. That corrupts data on Helppi's side. Plug in a real
-`store.Store` first.
-
-## Is the directory behaving?
-
-```bash
-DIRECTORY_TOKEN=… go run ./cmd/conformance \
-    -base-url https://…/scim/v2 -alias-domain separador.app
-```
-
-```
-PHASE 1 — Directory synchronization
-  PASS  P1.01   Credential is accepted                          §13 configuration
-  PASS  P1.04   active is present on every record               §06 lifecycle
-  PASS  P1.07   startIndex and count are honored                Appendix A — pagination
-  PASS  P1.08   Filtering by meta.lastModified works            §08 incremental sync
-  ...
-14 passed, 0 failed, 0 skipped
-```
-
-Read-only unless you name a record to write to. See
-[docs/CONFORMANCE.md](docs/CONFORMANCE.md); the same cases run as Go subtests
-via `conformance.Run(t, client, opts)` so they can gate your CI.
-
-## Quickstart
-
-The only thing you have to write is an implementation of `store.Store`.
 
 ```go
 client, err := scim.New(scim.Options{BaseURL: url, Token: token})
@@ -75,12 +165,10 @@ if err != nil {
 
 syncer := directory.New(client, myStore, directory.Options{})
 
-// One cycle. Call it from wherever you schedule work.
-stats, err := syncer.Incremental(ctx)
+stats, err := syncer.Incremental(ctx)   // one cycle
 ```
 
-Then prove your store satisfies the contract — including the rules its method
-signatures cannot express:
+Then prove your store satisfies the contract:
 
 ```go
 func TestMyStore(t *testing.T) {
@@ -88,11 +176,24 @@ func TestMyStore(t *testing.T) {
 }
 ```
 
+## Start with a dry run
+
+```bash
+DIRECTORY_BASE_URL=… DIRECTORY_TOKEN=… make dry-run
+```
+
+Writes nothing — not to your store, not to the directory, not to the checkpoint.
+
+The worker **refuses** to run for real against a directory with the in-memory
+store. An empty store makes every record look new, so it would create fresh
+accounts and overwrite every `externalId` in the directory. Plug in a real
+`store.Store` first.
+
 ## The model: a reconciler, not an event consumer
 
-Every cycle re-derives the desired state from the directory and converges.
-There is no ordering to preserve and no event to lose, so the worker can be
-killed and restarted at any point.
+Every cycle re-derives the desired state from the directory and converges. There
+is no ordering to preserve and no event to lose, so the worker can be killed and
+restarted at any point.
 
 ```
 every 5 min ──► incremental cycle ──► apply(record) ──► write back externalId
@@ -107,22 +208,31 @@ every 24 h ─► full walk ──► drift report
 | Package | Responsibility |
 |---|---|
 | `scim` | Protocol: types, HTTP client, pagination, retry. Knows nothing about helppers. |
-| `store` | The local-side contract, plus an in-memory implementation and a contract test suite. |
+| `store` | The local-side contract, an in-memory implementation, and a contract test suite. |
 | `store/postgres` | A PostgreSQL implementation, in its own module so the core stays dependency-free. |
 | `directory` | The reconciler. Knows nothing about HTTP. |
-| `conformance` | The acceptance criteria, as runnable checks. |
 | `scimtest` | Fake directory with fault injection. |
+| `conformance` | The acceptance criteria as runnable checks. |
 | `cmd/directorysyncd` | The worker: two tickers, structured logs, `/metrics`, `/healthz`, `/readyz`. |
-| `cmd/conformance` | Checks a live directory and prints one line per criterion. |
+| `cmd/conformance` | Runs the checks against a live directory and prints a report. |
 
-## Documentation
+## The store contract
 
-| Document | What it answers |
-|---|---|
-| [docs/INTEGRATION.md](docs/INTEGRATION.md) | The contract: identity model, lifecycle, error matrix, and which test defends each promise. |
-| [docs/IMPLEMENTING_STORE.md](docs/IMPLEMENTING_STORE.md) | How to write the one interface you own, and the two load-bearing lines of the schema. |
-| [docs/CONFORMANCE.md](docs/CONFORMANCE.md) | What each acceptance case checks, and why the write cases are opt-in. |
-| [docs/OPERATIONS.md](docs/OPERATIONS.md) | Metrics, alert thresholds and a runbook per failure. |
+```go
+type Store interface {
+    HelpperByDirectoryID(ctx context.Context, directoryID string) (Helpper, error)
+    CreateHelpper(ctx context.Context, p NewHelpper) (Helpper, error)
+    UpdateHelpper(ctx context.Context, id string, upd HelpperUpdate) error
+    EnabledHelppers(ctx context.Context) ([]Helpper, error)
+
+    Checkpoint(ctx context.Context) (time.Time, error)
+    SetCheckpoint(ctx context.Context, at time.Time) error
+}
+```
+
+`Helpper.ID` is a string, so a UUID, a ULID or a bigint all fit. See
+[docs/IMPLEMENTING_STORE.md](docs/IMPLEMENTING_STORE.md) — the two load-bearing
+lines of the schema are in there, and neither of them is Go.
 
 ## Nine decisions worth arguing about
 
@@ -131,51 +241,55 @@ every 24 h ─► full walk ──► drift report
    disables the entire fleet. `nil` is refused, never read as "disabled".
 2. **The checkpoint advances only when the cycle completes.** A partial cycle
    that advanced the watermark loses records permanently and silently; the
-   symptom shows up weeks later as one helpper nobody blocked.
+   symptom shows up weeks later as one account nobody blocked.
 3. **The watermark comes from `meta.lastModified`, not the local clock.** Clock
    skew between two companies stops mattering. A timestamp implausibly far in
    the future is refused rather than trusted.
 4. **Two minutes of overlap** are re-read every cycle to absorb
-   commit-visibility races. Safe because applying a record is idempotent —
-   which is the whole reason to insist on idempotency.
+   commit-visibility races. Safe because applying a record is idempotent.
 5. **An unusable record is skipped, not fatal — but the watermark is held
    behind it.** Failing the cycle would freeze the checkpoint and stop the whole
    fleet over one bad row; skipping without holding the watermark would lose its
-   eventual fix. Only a flood of them fails the cycle.
+   eventual fix.
 6. **Matching is by directory `id` only.** Never by login, name or alias, at any
    stage, including the initial load.
 7. **A `409` on write-back is never retried, and alerts once per identity.** It
    means the local mapping is wrong; retrying cannot fix it, and re-alerting
    every five minutes trains people to ignore the alert.
-8. **Absence from the directory never deprovisions.** The daily walk *reports*
-   the drift and stops there: a closure always arrives explicitly, as
-   `active: false`, before the record disappears.
+8. **Absence from the directory never deprovisions.** The daily walk reports the
+   drift and stops there.
 9. **A response that is not SCIM is an error, not an empty directory.** An HTML
    block page decoded loosely becomes "nobody works here any more".
 
-## What to replace before production
+## Conformance
 
-- `store/memory` → your own `store.Store`, verified with `storetest.Run` — or
-  just use [`store/postgres`](store/postgres), which already passes it. The
-  unique index on `directory_id` is what guarantees idempotent creation — the
-  check in Go is a fast path, not a guarantee.
-- `Options.Alert` → your on-call channel.
-- `cmd/directorysyncd/metrics.go` → your metrics registry.
-  `directory_sync_lag_seconds` is the one that matters: it is the SLI behind
-  "an account closure reaches the partner within N minutes", and it catches a stuck
-  worker even when nothing is erroring.
-- **Run exactly one instance.** Two replicas on the same schedule will both try
-  to create helppers on the first sync. The unique index prevents duplicates, but
-  the `409` storm is avoidable: use a lease, a Postgres advisory lock, or
-  `concurrencyPolicy: Forbid`.
+```bash
+go run ./cmd/conformance -base-url … -token …
+```
+
+Fourteen checks — eleven for Phase 1, three for Phase 2 — each naming the
+requirement it defends. `--json` for machine output. See
+[docs/CONFORMANCE.md](docs/CONFORMANCE.md).
+
+## Documentation
+
+| Document | What it answers |
+|---|---|
+| [docs/INTEGRATION.md](docs/INTEGRATION.md) | The contract: identity model, lifecycle, error matrix, and which test defends each promise. |
+| [docs/IMPLEMENTING_STORE.md](docs/IMPLEMENTING_STORE.md) | How to write the one interface you own. |
+| [docs/OPERATIONS.md](docs/OPERATIONS.md) | Metrics, alert thresholds, and a runbook per failure. |
+| [docs/CONFORMANCE.md](docs/CONFORMANCE.md) | Every check, and the requirement behind it. |
+
+## Requirements
+
+Go 1.22 or newer for the core packages, which have **no third-party
+dependencies** — vendor them and build offline if that is easier. The optional
+`store/postgres` module needs Go 1.24, because pgx's dependency chain does.
 
 ## Out of scope
 
-One-tap browser access (sections 09 to 11 of the proposal) is not here. It is an
-ordinary OpenID Connect client — `golang.org/x/oauth2` plus
-`github.com/coreos/go-oidc` — whose callback does
-`sub → helppers.directory_id → session`. The alternative path, with a signed
-launch URL, is a JWT verification plus a single-use record.
+One-tap browser access is not here. It is an ordinary OpenID Connect client
+whose callback maps the directory identifier to a session. See the proposal.
 
 ## License
 
