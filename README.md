@@ -2,159 +2,160 @@
 
 [![CI](https://github.com/Helppi/helppi-scim-go/actions/workflows/ci.yml/badge.svg)](https://github.com/Helppi/helppi-scim-go/actions/workflows/ci.yml)
 
-**A working client for the Helppi partner directory** — the code that keeps your
-records of Helppi professionals in step with ours, automatically.
+**Um cliente pronto para o diretório de parceiros da Helppi** — o código que
+mantém o cadastro de profissionais do seu lado em dia com o nosso,
+automaticamente.
 
-*Versão em português: [README.pt-BR.md](README.pt-BR.md).*
-
-> **How to read this.** Part 1 is written for product and operations: what this
-> is, what changes when it runs, and what your team has to do. Part 2 is the
-> engineering reference. You do not need Part 2 to decide whether this is worth
-> doing.
+> **Como ler.** A Parte 1 foi escrita para produto e operação: o que é isto, o
+> que muda quando roda, e o que o time de vocês precisa fazer. A Parte 2 é a
+> referência de engenharia. Não é preciso ler a Parte 2 para decidir se vale a
+> pena.
 
 ---
 
-# Part 1 · What this is
+# Parte 1 · O que é isto
 
-## In one paragraph
+## Em um parágrafo
 
-Helppi publishes a directory of the professionals authorized to work with you.
-This repository is a **reference client for that directory**: a small program
-that asks Helppi "who exists, and who is allowed to work right now?", applies
-the answer to your own accounts, and hands back the identifier you generated so
-both sides share a permanent key. It is written in Go, it has no dependencies,
-and it comes with a test suite that proves your integration works before it ever
-touches production.
+A Helppi publica um diretório com os profissionais autorizados a trabalhar com
+vocês. Este repositório é um **cliente de referência para esse diretório**: um
+programa pequeno que pergunta à Helppi "quem existe e quem pode operar agora?",
+aplica a resposta às contas de vocês e devolve o identificador que vocês geraram,
+de modo que os dois lados passem a compartilhar uma chave permanente. É escrito
+em Go, não tem dependências, e vem com uma bateria de testes que comprova a
+integração antes de ela encostar em produção.
 
-It accompanies the *Helppi partner directory technical proposal*. The proposal
-describes the agreement; this repository is the agreement, executable.
+Acompanha a *Proposta técnica do diretório de parceiros da Helppi*. A proposta
+descreve o acordo; este repositório é o acordo, executável.
 
-## The problem it solves
+## O problema que ele resolve
 
-Today a professional's record reaches you once, when they join, and then the two
-sides drift apart. When someone is suspended or has their registration closed at
-Helppi, nothing tells you. Their account on your side stays open until a person
-notices and asks someone to fix it — by message, by spreadsheet, always after
-the fact.
+Hoje o cadastro de um profissional chega até vocês uma única vez, quando ele
+entra, e a partir dali os dois lados se afastam. Quando alguém é suspenso ou tem
+o cadastro encerrado na Helppi, nada avisa vocês. A conta do lado de vocês segue
+aberta até que uma pessoa perceba e peça a correção — por mensagem, por planilha,
+sempre depois do fato.
 
-That gap is a security problem before it is an operational one: access that
-outlives the reason for it.
+Essa lacuna é um problema de segurança antes de ser um problema operacional:
+acesso que sobrevive ao motivo que o justificava.
 
-## What changes when this is running
+## O que muda quando isto está rodando
 
-| Today | With the directory |
+| Hoje | Com o diretório |
 |---|---|
-| The record arrives once, on the way in | The state is consulted every few minutes |
-| A suspension never reaches you | The account is blocked within the agreed interval |
-| No shared key between the two sides | A stable pair of identifiers, set once |
-| Someone notices, then asks for a fix | Nobody intervenes; it converges on its own |
-| "Which account is this person?" is manual work | The answer is a lookup |
+| O cadastro chega uma vez, na entrada | O estado é consultado a cada poucos minutos |
+| Uma suspensão nunca chega até vocês | A conta é bloqueada dentro do intervalo acordado |
+| Não existe chave comum entre os dois lados | Um par estável de identificadores, definido uma vez |
+| Alguém percebe e pede a correção | Ninguém intervém; converge sozinho |
+| "Essa conta é de qual profissional?" é trabalho manual | A resposta é uma consulta |
 
-## How it works, in plain language
+## Como funciona, em linguagem simples
 
-Every few minutes the client asks Helppi a single question: *what changed since
-the last time I asked?* Helppi answers with the professionals whose state moved
-— someone joined, someone was suspended, someone came back, someone's
-registration was closed. The client applies each answer to your accounts:
-creates, blocks, unblocks.
+A cada poucos minutos o cliente faz uma única pergunta à Helppi: *o que mudou
+desde a última vez que perguntei?* A Helppi responde com os profissionais cujo
+estado se moveu — alguém entrou, alguém foi suspenso, alguém voltou, alguém teve
+o cadastro encerrado. O cliente aplica cada resposta às contas de vocês: cria,
+bloqueia, desbloqueia.
 
-The first time it sees a professional, it creates the account on your side and
-then **writes your identifier back into Helppi's record**. That single step is
-what creates the shared key. From then on, both companies point at the same
-person with the same pair of identifiers, and nobody ever has to match by name
-or e-mail again — which matters, because names and e-mails change and are
-exactly the data neither company should be moving around.
+Na primeira vez que vê um profissional, ele cria a conta do lado de vocês e
+depois **grava o identificador de vocês de volta no registro da Helppi**. Esse
+passo é o que cria a chave comum. Dali em diante, as duas empresas apontam para
+a mesma pessoa com o mesmo par de identificadores, e ninguém mais precisa
+corresponder por nome ou e-mail — o que importa, porque nome e e-mail mudam e são
+justamente o dado que nenhuma das duas empresas deveria ficar movimentando.
 
-Once a day it does a full pass, comparing everything against everything, and
-reports any disagreement. It reports; it does not act. A professional missing
-from the directory is never treated as an instruction to delete anything.
+Uma vez por dia ele faz uma passagem completa, compara tudo com tudo e reporta
+qualquer divergência. Ele reporta; não age. Um profissional ausente do diretório
+nunca é tratado como ordem para apagar nada.
 
-Three properties are worth knowing, because they are what make this safe to run
-unattended:
+Três propriedades merecem ser conhecidas, porque são o que torna seguro deixar
+isso rodando sem supervisão:
 
-- **It cannot lose an update.** If a cycle fails halfway, it does not record
-  progress, so the next cycle simply does the same work again.
-- **Repeating is free.** Applying the same answer twice changes nothing, so
-  retrying is always safe.
-- **It never guesses.** A record that arrives incomplete is skipped and reported
-  rather than interpreted — because interpreting "I don't know" as "blocked"
-  would take everybody's access away at once.
+- **Não consegue perder uma atualização.** Se um ciclo falha no meio, ele não
+  registra progresso — o ciclo seguinte simplesmente refaz o mesmo trabalho.
+- **Repetir não custa nada.** Aplicar a mesma resposta duas vezes não muda nada,
+  então tentar de novo é sempre seguro.
+- **Nunca adivinha.** Um registro que chega incompleto é pulado e reportado, em
+  vez de interpretado — porque interpretar "não sei" como "bloqueado" tiraria o
+  acesso de todo mundo de uma vez.
 
-## What your team has to do
+## O que o time de vocês precisa fazer
 
-Three things. Everything else is in this repository.
+Três coisas. Todo o resto está neste repositório.
 
-**1 · Connect it to your database.** You implement one interface — six methods:
-find, create, update, list, and read/write a timestamp. That is the only code
-this integration genuinely requires you to write. If you run PostgreSQL, even
-this is already done: [`store/postgres`](store/postgres) is a working
-implementation you can use as-is.
+**1 · Ligar ao banco de vocês.** Vocês implementam uma interface — seis métodos:
+buscar, criar, atualizar, listar e ler/gravar uma data. É o único código que esta
+integração realmente exige que vocês escrevam. Se rodam PostgreSQL, nem isso:
+[`store/postgres`](store/postgres) é uma implementação pronta para usar como
+está.
 
-**2 · Run one process.** A worker is included, with metrics and health checks.
-It runs continuously, or once per scheduled run — whichever fits how you deploy.
+**2 · Subir um processo.** O worker está incluído, com métricas e verificação de
+saúde. Roda continuamente ou uma vez por execução agendada — o que se encaixar no
+jeito de vocês publicarem.
 
-**3 · Return your identifier.** When you create an account, write its id back to
-Helppi's record. One call, once per professional.
+**3 · Devolver o identificador.** Quando criarem uma conta, gravem o id dela de
+volta no registro da Helppi. Uma chamada, uma vez por profissional.
 
-Then run the conformance command against Helppi's test environment. It prints a
-pass/fail line per requirement, and that report **is** the acceptance criterion
-for Phase 1 — not an opinion, not a meeting.
+Depois é rodar o comando de conformidade contra o ambiente de teste da Helppi.
+Ele imprime uma linha de aprovado/reprovado por requisito, e esse relatório **é**
+o critério de aceite da Fase 1 — não é opinião, não é reunião.
 
-## What you get without writing it
+## O que já vem pronto
 
 | | |
 |---|---|
-| **A fake Helppi directory** | Develop and test offline, with no sandbox and no credentials. It also simulates the failures — rate limits, conflicts, malformed records — so you can see how your side behaves before it matters. |
-| **A conformance command** | 14 checks across both phases, each naming the requirement it defends. Exits non-zero on failure, so it works as a gate in your pipeline. |
-| **A contract test suite** | Point it at your database implementation and it verifies the rules the method signatures cannot express — including that eight simultaneous workers create exactly one account, not eight. |
-| **A ready worker** | Metrics, health checks, structured logs, a dry-run mode that writes nothing, and a guard that refuses to run in a configuration that could corrupt data. |
-| **A PostgreSQL store** | In its own module, so nobody who doesn't want it pays for the dependency. |
+| **Um diretório falso da Helppi** | Desenvolvam e testem offline, sem sandbox e sem credencial. Ele também simula as falhas — limite de requisições, conflito, registro malformado — para vocês verem como o lado de vocês se comporta antes de isso importar. |
+| **Um comando de conformidade** | 14 verificações nas duas fases, cada uma nomeando o requisito que defende. Sai com código de erro, então serve de portão no pipeline de vocês. |
+| **Uma suíte de contrato** | Apontem para a implementação de banco de vocês e ela confere as regras que a assinatura dos métodos não consegue expressar — inclusive que oito workers simultâneos criam exatamente uma conta, não oito. |
+| **Um worker pronto** | Métricas, verificação de saúde, logs estruturados, um modo de simulação que não escreve nada, e uma trava que recusa rodar numa configuração capaz de corromper dados. |
+| **Um store PostgreSQL** | Em módulo próprio, para quem não quiser não pagar a dependência. |
 
-## What this does not do
+## O que isto não faz
 
-- **It does not log anyone in.** Single sign-on is a separate concern, described
-  in the proposal. This client is only about who exists and who is allowed.
-- **It does not receive personal data beyond the minimum.** No real e-mail, no
-  full legal name, no phone or document number. What crosses is an opaque
-  identifier, an alias, an abbreviated name, and a status.
-- **It does not delete anything on its own.** Absence from the directory is
-  reported as a discrepancy, never acted on.
-- **It does not write to Helppi**, except for that one identifier.
+- **Não autentica ninguém.** Login único é assunto separado, descrito na
+  proposta. Este cliente trata apenas de quem existe e quem pode operar.
+- **Não recebe dado pessoal além do mínimo.** Sem e-mail real, sem nome completo,
+  sem telefone nem documento. O que atravessa é um identificador opaco, um alias,
+  um nome abreviado e um status.
+- **Não apaga nada por conta própria.** Ausência no diretório é reportada como
+  divergência, nunca executada.
+- **Não escreve na Helppi**, com a exceção desse único identificador.
 
-## Questions that usually come up
+## Perguntas que costumam aparecer
 
-**Do we have to use Go?**
-No. If your stack is something else, this repository is still useful as the
-executable specification: the behaviour is documented, the failure cases are
-named, and the fixtures in `testdata/` are the same bytes both sides can test
-against. The conformance command runs against any implementation, in any
-language, because it only speaks HTTP.
+**Precisamos usar Go?**
+Não. Se a stack de vocês é outra, este repositório continua útil como
+especificação executável: o comportamento está documentado, os casos de falha
+estão nomeados, e as fixtures em `testdata/` são os mesmos bytes contra os quais
+os dois lados podem testar. O comando de conformidade roda contra qualquer
+implementação, em qualquer linguagem, porque só fala HTTP.
 
-**What if a sync fails?**
-Nothing breaks. The client did not record progress, so the next cycle repeats
-the work. A cycle that fails is a delayed cycle, not a lost one.
+**E se uma sincronização falhar?**
+Nada quebra. O cliente não registrou progresso, então o ciclo seguinte refaz o
+trabalho. Um ciclo que falha é um ciclo atrasado, não um ciclo perdido.
 
-**How fast does a block take effect?**
-Whatever interval the two companies agree on. The proposal suggests five
-minutes; the number is a setting, not a rewrite.
+**Em quanto tempo um bloqueio faz efeito?**
+No intervalo que as duas empresas acordarem. A proposta sugere cinco minutos; o
+número é configuração, não reescrita.
 
-**What if we already have accounts for these people?**
-The first full pass finds them by directory identifier and adopts them. It does
-not create duplicates — and there is a test that proves it.
+**E se já tivermos contas dessas pessoas?**
+A primeira passagem completa encontra as contas pelo identificador do diretório e
+as adota. Não cria duplicadas — e existe teste que comprova.
 
-**How do we know we are done?**
-Run `conformance` against Helppi's test environment. Fourteen checks, each
-mapped to a section of the proposal. When they all pass, Phase 1 is complete.
+**Como sabemos que terminamos?**
+Rodem o `conformance` contra o ambiente de teste da Helppi. Catorze verificações,
+cada uma ligada a uma seção da proposta. Quando todas passarem, a Fase 1 está
+concluída.
 
 ---
 
-# Part 2 · Engineering reference
+# Parte 2 · Referência de engenharia
 
-## Quickstart
+## Início rápido
 
 ```bash
-go test ./... -race        # 45 tests, no network
-make ci                    # gofmt + vet + tests
+go test ./... -race        # 45 testes, sem rede
+make ci                    # gofmt + vet + testes
 ```
 
 ```go
@@ -163,60 +164,60 @@ if err != nil {
     return err
 }
 
-syncer := directory.New(client, myStore, directory.Options{})
+syncer := directory.New(client, meuStore, directory.Options{})
 
-stats, err := syncer.Incremental(ctx)   // one cycle
+stats, err := syncer.Incremental(ctx)   // um ciclo
 ```
 
-Then prove your store satisfies the contract:
+Depois provem que o store cumpre o contrato:
 
 ```go
-func TestMyStore(t *testing.T) {
-    storetest.Run(t, func(t *testing.T) store.Store { return newTestStore(t) })
+func TestMeuStore(t *testing.T) {
+    storetest.Run(t, func(t *testing.T) store.Store { return novoStoreDeTeste(t) })
 }
 ```
 
-## Start with a dry run
+## Comecem por uma execução seca
 
 ```bash
 DIRECTORY_BASE_URL=… DIRECTORY_TOKEN=… make dry-run
 ```
 
-Writes nothing — not to your store, not to the directory, not to the checkpoint.
+Não escreve nada — nem no banco de vocês, nem no diretório, nem no checkpoint.
 
-The worker **refuses** to run for real against a directory with the in-memory
-store. An empty store makes every record look new, so it would create fresh
-accounts and overwrite every `externalId` in the directory. Plug in a real
-`store.Store` first.
+O worker **se recusa** a rodar de verdade contra um diretório usando o store em
+memória. Um store vazio faz todo registro parecer novo, então ele criaria contas
+do zero e gravaria por cima de todos os `externalId` do diretório. Liguem um
+`store.Store` de verdade antes.
 
-## The model: a reconciler, not an event consumer
+## O modelo: reconciliador, não consumidor de eventos
 
-Every cycle re-derives the desired state from the directory and converges. There
-is no ordering to preserve and no event to lose, so the worker can be killed and
-restarted at any point.
+Cada ciclo recalcula o estado desejado a partir do diretório e converge. Não há
+ordem a preservar nem evento a perder, então o processo pode ser morto e
+reiniciado em qualquer ponto.
 
 ```
-every 5 min ──► incremental cycle ──► apply(record) ──► write back externalId
-                       │                                        │
-             checkpoint advances only if                  409 ⇒ alert once,
-             the cycle completed in full                  never retried
-every 24 h ─► full walk ──► drift report
+a cada 5 min ──► ciclo incremental ──► apply(registro) ──► devolve externalId
+                        │                                        │
+              checkpoint só avança se o ciclo             409 ⇒ alerta uma vez,
+              terminou inteiro                            nunca repetição
+a cada 24 h ─► varredura completa ──► relatório de divergência
 ```
 
-## Layout
+## Estrutura
 
-| Package | Responsibility |
+| Pacote | Responsabilidade |
 |---|---|
-| `scim` | Protocol: types, HTTP client, pagination, retry. Knows nothing about helppers. |
-| `store` | The local-side contract, an in-memory implementation, and a contract test suite. |
-| `store/postgres` | A PostgreSQL implementation, in its own module so the core stays dependency-free. |
-| `directory` | The reconciler. Knows nothing about HTTP. |
-| `scimtest` | Fake directory with fault injection. |
-| `conformance` | The acceptance criteria as runnable checks. |
-| `cmd/directorysyncd` | The worker: two tickers, structured logs, `/metrics`, `/healthz`, `/readyz`. |
-| `cmd/conformance` | Runs the checks against a live directory and prints a report. |
+| `scim` | Protocolo: tipos, cliente HTTP, paginação, retry. Não sabe o que é um helpper. |
+| `store` | O contrato do lado local, implementação em memória e suíte de contrato. |
+| `store/postgres` | Implementação em PostgreSQL, em módulo próprio para o núcleo seguir sem dependências. |
+| `directory` | O reconciliador. Não sabe o que é HTTP. |
+| `scimtest` | Diretório falso com injeção de falhas. |
+| `conformance` | Os critérios de aceite como verificações executáveis. |
+| `cmd/directorysyncd` | O worker: dois tickers, logs estruturados, `/metrics`, `/healthz`, `/readyz`. |
+| `cmd/conformance` | Roda as verificações contra um diretório real e imprime o relatório. |
 
-## The store contract
+## O contrato do store
 
 ```go
 type Store interface {
@@ -230,67 +231,68 @@ type Store interface {
 }
 ```
 
-`Helpper.ID` is a string, so a UUID, a ULID or a bigint all fit. See
-[docs/IMPLEMENTING_STORE.md](docs/IMPLEMENTING_STORE.md) — the two load-bearing
-lines of the schema are in there, and neither of them is Go.
+`Helpper.ID` é string, então UUID, ULID ou bigint cabem. Vejam
+[docs/IMPLEMENTING_STORE.md](docs/IMPLEMENTING_STORE.md) — as duas linhas do
+schema que sustentam tudo estão lá, e nenhuma delas é Go.
 
-## Nine decisions worth arguing about
+## Nove decisões que valem discussão
 
-1. **`Active` is a `*bool`, not a `bool`.** With a plain `bool`, a truncated
-   response or a missing attribute decodes to `false` — and the reconciler
-   disables the entire fleet. `nil` is refused, never read as "disabled".
-2. **The checkpoint advances only when the cycle completes.** A partial cycle
-   that advanced the watermark loses records permanently and silently; the
-   symptom shows up weeks later as one account nobody blocked.
-3. **The watermark comes from `meta.lastModified`, not the local clock.** Clock
-   skew between two companies stops mattering. A timestamp implausibly far in
-   the future is refused rather than trusted.
-4. **Two minutes of overlap** are re-read every cycle to absorb
-   commit-visibility races. Safe because applying a record is idempotent.
-5. **An unusable record is skipped, not fatal — but the watermark is held
-   behind it.** Failing the cycle would freeze the checkpoint and stop the whole
-   fleet over one bad row; skipping without holding the watermark would lose its
-   eventual fix.
-6. **Matching is by directory `id` only.** Never by login, name or alias, at any
-   stage, including the initial load.
-7. **A `409` on write-back is never retried, and alerts once per identity.** It
-   means the local mapping is wrong; retrying cannot fix it, and re-alerting
-   every five minutes trains people to ignore the alert.
-8. **Absence from the directory never deprovisions.** The daily walk reports the
-   drift and stops there.
-9. **A response that is not SCIM is an error, not an empty directory.** An HTML
-   block page decoded loosely becomes "nobody works here any more".
+1. **`Active` é `*bool`, não `bool`.** Com `bool`, uma resposta truncada ou um
+   atributo ausente decodifica para `false` — e o reconciliador desabilita a
+   frota inteira. `nil` é recusado, nunca lido como "desabilitado".
+2. **O checkpoint só avança quando o ciclo termina inteiro.** Um ciclo parcial
+   que avança a marca d'água perde registros de forma permanente e silenciosa: o
+   sintoma aparece semanas depois, como uma conta que ninguém bloqueou.
+3. **A marca d'água vem de `meta.lastModified`, não do relógio local.** O desvio
+   de relógio entre as duas empresas deixa de importar. Um horário absurdamente
+   no futuro é recusado em vez de aceito.
+4. **Dois minutos de sobreposição** são relidos a cada ciclo, para absorver
+   corridas de visibilidade. É seguro porque aplicar um registro é idempotente.
+5. **Registro inválido é pulado, não fatal — mas a marca d'água fica atrás
+   dele.** Falhar o ciclo congelaria o checkpoint e pararia a frota inteira por
+   causa de uma linha ruim; pular sem segurar a marca d'água perderia a correção
+   futura dela.
+6. **A correspondência é exclusivamente pelo `id` do diretório.** Nunca por
+   login, nome ou alias, em nenhuma etapa, nem na carga inicial.
+7. **`409` na devolução nunca é repetido, e alerta uma vez por identidade.**
+   Significa que o mapeamento local está errado; repetir não corrige, e alertar a
+   cada cinco minutos ensina as pessoas a ignorar o alerta.
+8. **Ausência no diretório nunca desprovisiona.** A varredura diária reporta a
+   divergência e para por aí.
+9. **Resposta que não é SCIM é erro, não diretório vazio.** Uma página HTML de
+   bloqueio, decodificada com folga, vira "não trabalha mais ninguém aqui".
 
-## Conformance
+## Conformidade
 
 ```bash
 go run ./cmd/conformance -base-url … -token …
 ```
 
-Fourteen checks — eleven for Phase 1, three for Phase 2 — each naming the
-requirement it defends. `--json` for machine output. See
+Catorze verificações — onze da Fase 1, três da Fase 2 — cada uma nomeando o
+requisito que defende. `--json` para saída de máquina. Vejam
 [docs/CONFORMANCE.md](docs/CONFORMANCE.md).
 
-## Documentation
+## Documentação
 
-| Document | What it answers |
+| Documento | O que responde |
 |---|---|
-| [docs/INTEGRATION.md](docs/INTEGRATION.md) | The contract: identity model, lifecycle, error matrix, and which test defends each promise. |
-| [docs/IMPLEMENTING_STORE.md](docs/IMPLEMENTING_STORE.md) | How to write the one interface you own. |
-| [docs/OPERATIONS.md](docs/OPERATIONS.md) | Metrics, alert thresholds, and a runbook per failure. |
-| [docs/CONFORMANCE.md](docs/CONFORMANCE.md) | Every check, and the requirement behind it. |
+| [docs/INTEGRATION.md](docs/INTEGRATION.md) | O contrato: modelo de identidade, ciclo de vida, matriz de erros e qual teste defende cada promessa. |
+| [docs/IMPLEMENTING_STORE.md](docs/IMPLEMENTING_STORE.md) | Como escrever a única interface que é de vocês. |
+| [docs/OPERATIONS.md](docs/OPERATIONS.md) | Métricas, limiares de alerta e runbook por tipo de falha. |
+| [docs/CONFORMANCE.md](docs/CONFORMANCE.md) | Cada verificação, e o requisito por trás dela. |
 
-## Requirements
+## Requisitos
 
-Go 1.22 or newer for the core packages, which have **no third-party
-dependencies** — vendor them and build offline if that is easier. The optional
-`store/postgres` module needs Go 1.24, because pgx's dependency chain does.
+Go 1.22 ou mais novo para os pacotes do núcleo, que **não têm dependências de
+terceiros** — dá para copiar para dentro do repositório de vocês e compilar
+offline. O módulo opcional `store/postgres` precisa de Go 1.24, porque a cadeia
+de dependências do pgx precisa.
 
-## Out of scope
+## Fora de escopo
 
-One-tap browser access is not here. It is an ordinary OpenID Connect client
-whose callback maps the directory identifier to a session. See the proposal.
+O acesso com um toque não está aqui. É um cliente OpenID Connect comum, cujo
+callback mapeia o identificador do diretório para uma sessão. Vejam a proposta.
 
-## License
+## Licença
 
-MIT. See [LICENSE](LICENSE).
+MIT. Veja [LICENSE](LICENSE).

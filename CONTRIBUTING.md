@@ -24,5 +24,9 @@ make ci    # gofmt, vet, tests with -race
   wrong, such as `Active` being a pointer.
 - **Name tests after the behavior they pin**, not the function they call:
   `TestMalformedRecordIsSkippedNotFatal`, not `TestApply3`.
+- **Português no README, inglês no código.** O README acompanha a proposta e é
+  lido por produto e engenharia do parceiro, em português. Código, comentários,
+  godoc, CHANGELOG e os guias em `docs/` ficam em inglês: comentário é lido
+  dentro da IDE, e é a convenção do ecossistema Go.
 - **Changes to the contract go in `docs/INTEGRATION.md` in the same PR.** If the
   two disagree, the document is what the partner implemented against.
